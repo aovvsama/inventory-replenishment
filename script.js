@@ -52,7 +52,7 @@ class InventoryReplenishmentGenerator {
             this.updateProgress(40, '正在处理数据...');
             
             const processedData = this.processData(data);
-            this.updateProgress(70, '正在生成Word文档...');
+            this.updateProgress(70, '正在生成文档...');
             
             this.processedData = processedData;
             this.updateProgress(100, '处理完成！');
@@ -265,78 +265,109 @@ class InventoryReplenishmentGenerator {
     async generateWordDocument() {
         const { vProducts, vwProducts } = this.separateVandVWProducts(this.processedData);
         
-        // 创建Word文档
-        const doc = new docx.Document({
-            sections: [{
-                properties: {
-                    page: {
-                        margin: {
-                            top: 800,    // 约1.4cm
-                            right: 800,  // 约1.4cm
-                            bottom: 800, // 约1.4cm
-                            left: 800,   // 约1.4cm
-                        }
-                    }
-                },
-                children: []
-            }]
-        });
-
+        // 创建文档内容
+        const docChildren = [];
+        
         // 添加标题
-        const title = new docx.Paragraph({
-            children: [
-                new docx.TextRun({
-                    text: "库存补货清单",
-                    bold: true,
-                    size: 28,
-                    font: "微软雅黑"
-                })
-            ],
-            alignment: docx.AlignmentType.CENTER,
-            spacing: { after: 400 }
-        });
-        doc.addSection({
-            properties: {},
-            children: [title]
-        });
+        docChildren.push(
+            new docx.Paragraph({
+                children: [
+                    new docx.TextRun({
+                        text: "库存补货清单",
+                        bold: true,
+                        size: 28,
+                        font: "微软雅黑"
+                    })
+                ],
+                alignment: docx.AlignmentType.CENTER,
+                spacing: { after: 400 }
+            })
+        );
 
         // 添加时间戳
         const timestamp = new Date().toLocaleString('zh-CN');
-        const timeParagraph = new docx.Paragraph({
-            children: [
-                new docx.TextRun({
-                    text: `生成时间: ${timestamp}`,
-                    size: 20,
-                    font: "微软雅黑"
-                })
-            ],
-            alignment: docx.AlignmentType.LEFT,
-            spacing: { after: 600 }
-        });
-        doc.addParagraph(timeParagraph);
+        docChildren.push(
+            new docx.Paragraph({
+                children: [
+                    new docx.TextRun({
+                        text: `生成时间: ${timestamp}`,
+                        size: 20,
+                        font: "微软雅黑"
+                    })
+                ],
+                alignment: docx.AlignmentType.LEFT,
+                spacing: { after: 600 }
+            })
+        );
 
         // 添加统计信息
-        const statsParagraph = new docx.Paragraph({
-            children: [
-                new docx.TextRun({
-                    text: `统计信息：共 ${this.processedData.length} 个产品组合（V系列: ${vProducts.length}个, VW系列: ${vwProducts.length}个）`,
-                    size: 20,
-                    font: "微软雅黑",
-                    bold: true
-                })
-            ],
-            spacing: { after: 400 }
-        });
-        doc.addParagraph(statsParagraph);
+        docChildren.push(
+            new docx.Paragraph({
+                children: [
+                    new docx.TextRun({
+                        text: `统计信息：共 ${this.processedData.length} 个产品组合（V系列: ${vProducts.length}个, VW系列: ${vwProducts.length}个）`,
+                        size: 20,
+                        font: "微软雅黑",
+                        bold: true
+                    })
+                ],
+                spacing: { after: 400 }
+            })
+        );
 
         // 添加V系列产品
         if (vProducts.length > 0) {
-            this.addProductSection(doc, "MENS audit list", vProducts);
+            docChildren.push(
+                new docx.Paragraph({
+                    children: [
+                        new docx.TextRun({
+                            text: "MENS audit list",
+                            bold: true,
+                            size: 24,
+                            font: "微软雅黑"
+                        })
+                    ],
+                    alignment: docx.AlignmentType.CENTER,
+                    spacing: { after: 400 }
+                })
+            );
+
+            const vTable = this.createProductTable(vProducts);
+            docChildren.push(vTable);
         }
 
-        // 添加分页（如果有VW系列产品）
+        // 添加分页符（如果有VW系列产品）
         if (vwProducts.length > 0) {
-            doc.addSection({
+            docChildren.push(
+                new docx.Paragraph({
+                    children: [
+                        new docx.PageBreak()
+                    ]
+                })
+            );
+
+            docChildren.push(
+                new docx.Paragraph({
+                    children: [
+                        new docx.TextRun({
+                            text: "WOMENS audit list",
+                            bold: true,
+                            size: 24,
+                            font: "微软雅黑"
+                        })
+                    ],
+                    alignment: docx.AlignmentType.CENTER,
+                    spacing: { after: 400 }
+                })
+            );
+
+            const vwTable = this.createProductTable(vwProducts);
+            docChildren.push(vwTable);
+        }
+
+        // 创建文档
+        const doc = new docx.Document({
+            sections: [{
                 properties: {
                     page: {
                         margin: {
@@ -347,154 +378,97 @@ class InventoryReplenishmentGenerator {
                         }
                     }
                 },
-                children: [
-                    new docx.Paragraph({
-                        children: [
-                            new docx.TextRun({
-                                text: "WOMENS audit list",
-                                bold: true,
-                                size: 24,
-                                font: "微软雅黑"
-                            })
-                        ],
-                        alignment: docx.AlignmentType.CENTER,
-                        spacing: { after: 400 }
-                    })
-                ]
-            });
-
-            this.addProductSection(doc, "", vwProducts, false);
-        }
+                children: docChildren
+            }]
+        });
 
         return doc;
     }
 
-    addProductSection(doc, title, products, addTitle = true) {
-        if (addTitle && title) {
-            const titleParagraph = new docx.Paragraph({
-                children: [
-                    new docx.TextRun({
-                        text: title,
-                        bold: true,
-                        size: 24,
-                        font: "微软雅黑"
-                    })
-                ],
-                alignment: docx.AlignmentType.CENTER,
-                spacing: { after: 400 }
-            });
-            doc.addParagraph(titleParagraph);
-        }
-
+    createProductTable(products) {
         const groupedProducts = this.groupProductsByCode(products);
         const productsPerColumn = Math.ceil(groupedProducts.length / 2);
 
-        // 创建表格
+        const tableRows = [];
+
+        // 添加表头
+        const headerRow = new docx.TableRow({
+            children: [
+                this.createTableCell("商品条码", true),
+                this.createTableCell("颜色", true),
+                this.createTableCell("尺寸", true),
+                this.createTableCell("商品条码", true),
+                this.createTableCell("颜色", true),
+                this.createTableCell("尺寸", true)
+            ]
+        });
+        tableRows.push(headerRow);
+
+        // 添加产品数据
+        for (let i = 0; i < productsPerColumn; i++) {
+            const leftProduct = groupedProducts[i];
+            const rightProduct = groupedProducts[i + productsPerColumn];
+            const bgColor = i % 2 === 0 ? "F5F5F5" : "FFFFFF";
+
+            const row = new docx.TableRow({
+                children: [
+                    this.createProductCell(leftProduct, bgColor),
+                    this.createColorCell(leftProduct, bgColor),
+                    this.createSizesCell(leftProduct, bgColor),
+                    this.createProductCell(rightProduct, bgColor),
+                    this.createColorCell(rightProduct, bgColor),
+                    this.createSizesCell(rightProduct, bgColor)
+                ]
+            });
+            tableRows.push(row);
+        }
+
         const table = new docx.Table({
             width: {
                 size: 100,
                 type: docx.WidthType.PERCENTAGE,
             },
-            borders: {
-                top: { style: docx.BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                bottom: { style: docx.BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                left: { style: docx.BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                right: { style: docx.BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                insideHorizontal: { style: docx.BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                insideVertical: { style: docx.BorderStyle.NONE, size: 0, color: "FFFFFF" },
-            },
-            rows: []
+            borders: docx.TableBorders.NONE,
+            rows: tableRows
         });
 
-        // 添加产品数据到表格
-        for (let i = 0; i < productsPerColumn; i++) {
-            const leftProduct = groupedProducts[i];
-            const rightProduct = groupedProducts[i + productsPerColumn];
+        return table;
+    }
 
-            const row = new docx.TableRow({
-                children: []
-            });
-
-            // 左侧产品
-            row.addCell(this.createProductCell(leftProduct, i % 2 === 0 ? "F5F5F5" : "FFFFFF"));
-            row.addCell(this.createColorCell(leftProduct, i % 2 === 0 ? "F5F5F5" : "FFFFFF"));
-            row.addCell(this.createSizesCell(leftProduct, i % 2 === 0 ? "F5F5F5" : "FFFFFF"));
-
-            // 右侧产品
-            row.addCell(this.createProductCell(rightProduct, i % 2 === 0 ? "F5F5F5" : "FFFFFF"));
-            row.addCell(this.createColorCell(rightProduct, i % 2 === 0 ? "F5F5F5" : "FFFFFF"));
-            row.addCell(this.createSizesCell(rightProduct, i % 2 === 0 ? "F5F5F5" : "FFFFFF"));
-
-            table.addRow(row);
-        }
-
-        doc.addParagraph(new docx.Paragraph({
-            children: [table],
-            spacing: { after: 200 }
-        }));
+    createTableCell(text, isHeader = false) {
+        return new docx.TableCell({
+            width: { size: 16, type: docx.WidthType.PERCENTAGE },
+            margins: { top: 100, bottom: 100, left: 100, right: 100 },
+            shading: isHeader ? { fill: "E0E0E0" } : undefined,
+            children: [
+                new docx.Paragraph({
+                    children: [
+                        new docx.TextRun({
+                            text: text,
+                            size: 18,
+                            font: "微软雅黑",
+                            bold: isHeader
+                        })
+                    ],
+                    alignment: docx.AlignmentType.LEFT
+                })
+            ]
+        });
     }
 
     createProductCell(product, bgColor) {
         const text = product ? (product.showCode ? product.productCode : "") : "";
-        return new docx.TableCell({
-            width: { size: 15, type: docx.WidthType.PERCENTAGE },
-            margins: { top: 100, bottom: 100, left: 100, right: 100 },
-            shading: { fill: bgColor },
-            children: [
-                new docx.Paragraph({
-                    children: [
-                        new docx.TextRun({
-                            text: text,
-                            size: 18,
-                            font: "微软雅黑"
-                        })
-                    ],
-                    alignment: docx.AlignmentType.LEFT
-                })
-            ]
-        });
+        return this.createTableCell(text, false, bgColor);
     }
 
     createColorCell(product, bgColor) {
         const text = product ? product.color : "";
-        return new docx.TableCell({
-            width: { size: 12, type: docx.WidthType.PERCENTAGE },
-            margins: { top: 100, bottom: 100, left: 100, right: 100 },
-            shading: { fill: bgColor },
-            children: [
-                new docx.Paragraph({
-                    children: [
-                        new docx.TextRun({
-                            text: text,
-                            size: 18,
-                            font: "微软雅黑"
-                        })
-                    ],
-                    alignment: docx.AlignmentType.LEFT
-                })
-            ]
-        });
+        return this.createTableCell(text, false, bgColor);
     }
 
     createSizesCell(product, bgColor) {
         const text = product ? this.formatSizesText(product.sizes, 20) : "";
-        return new docx.TableCell({
-            width: { size: 23, type: docx.WidthType.PERCENTAGE },
-            margins: { top: 100, bottom: 100, left: 100, right: 100 },
-            shading: { fill: bgColor },
-            children: [
-                new docx.Paragraph({
-                    children: [
-                        new docx.TextRun({
-                            text: text,
-                            size: 18,
-                            font: "微软雅黑"
-                        })
-                    ],
-                    alignment: docx.AlignmentType.LEFT
-                })
-            ]
-        });
+        return this.createTableCell(text, false, bgColor);
     }
 
     async downloadWordDocument() {
@@ -511,7 +485,79 @@ class InventoryReplenishmentGenerator {
         } catch (error) {
             console.error('生成Word文档失败:', error);
             alert('生成Word文档失败: ' + error.message);
+            
+            // 如果Word生成失败，回退到文本格式
+            this.downloadTextDocument();
         }
+    }
+
+    downloadTextDocument() {
+        const content = this.generateOutputContent();
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        saveAs(blob, `补货清单_${timestamp}.txt`);
+    }
+
+    generateOutputContent() {
+        const { vProducts, vwProducts } = this.separateVandVWProducts(this.processedData);
+        let content = "库存补货清单\n\n";
+        const timestamp = new Date().toLocaleString('zh-CN');
+
+        content += `统计信息：共 ${this.processedData.length} 个产品组合（V系列: ${vProducts.length}个, VW系列: ${vwProducts.length}个）\n\n`;
+
+        if (vProducts.length > 0) {
+            content += "MENS audit list\n";
+            content += "=".repeat(50) + "\n";
+            const groupedV = this.groupProductsByCode(vProducts);
+            content += this.formatProductsForText(groupedV);
+            content += "\n\n";
+        }
+
+        if (vwProducts.length > 0) {
+            content += "WOMENS audit list\n";
+            content += "=".repeat(50) + "\n";
+            const groupedVW = this.groupProductsByCode(vwProducts);
+            content += this.formatProductsForText(groupedVW);
+        }
+
+        content += `\n生成时间: ${timestamp}\n`;
+        return content;
+    }
+
+    formatProductsForText(products) {
+        let content = "";
+        const chunkSize = Math.ceil(products.length / 2);
+        
+        content += "商品条码\t颜色\t尺寸\n";
+        content += "-".repeat(50) + "\n";
+        
+        for (let i = 0; i < chunkSize; i++) {
+            const leftProduct = products[i];
+            const rightProduct = products[i + chunkSize];
+            
+            let line = "";
+            
+            if (leftProduct) {
+                line += this.formatProductLine(leftProduct).padEnd(35);
+            } else {
+                line += "".padEnd(35);
+            }
+            
+            if (rightProduct) {
+                line += this.formatProductLine(rightProduct);
+            }
+            
+            content += line + "\n";
+        }
+        
+        return content;
+    }
+
+    formatProductLine(product) {
+        const code = product.showCode ? product.productCode : "↑";
+        const color = product.color || "";
+        const sizes = this.formatSizesText(product.sizes, 15);
+        return `${code}\t${color}\t${sizes}`;
     }
 
     showProgress() {
