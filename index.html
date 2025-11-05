@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>库存补货清单生成器</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/7.8.2/docx.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>库存补货清单生成器</h1>
+            <p>上传Excel文件，自动生成补货清单Word文档</p>
+        </header>
+
+        <main>
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-content">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <h3>拖放Excel文件到这里</h3>
+                    <p>或点击选择文件</p>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+                    <button class="btn-primary" onclick="document.getElementById('fileInput').click()">
+                        选择Excel文件
+                    </button>
+                </div>
+            </div>
+
+            <div class="progress-area" id="progressArea" style="display: none;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <p id="progressText">正在处理数据...</p>
+            </div>
+
+            <div class="result-area" id="resultArea" style="display: none;">
+                <div class="result-card">
+                    <h3>处理完成！</h3>
+                    <p id="resultText"></p>
+                    <button class="btn-success" id="downloadBtn">下载补货清单</button>
+                    <button class="btn-secondary" onclick="resetApp()">处理新文件</button>
+                </div>
+            </div>
+
+            <div class="instructions">
+                <h4>使用说明：</h4>
+                <ul>
+                    <li>支持 .xlsx 和 .xls 格式的Excel文件</li>
+                    <li>Excel文件需要包含以下列：商品条码、Color、Size、总库存</li>
+                    <li>系统会自动分离 V 和 VW 开头的商品</li>
+                    <li>所有处理在浏览器中完成，文件不会上传到服务器</li>
+                </ul>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
