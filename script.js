@@ -88,50 +88,75 @@ class InventoryReplenishmentGenerator {
         });
     }
 
-    processData(data) {
-        // 检查必需列
-        const requiredColumns = ['商品条码', 'Color', 'Size', '总库存'];
-        const missingColumns = requiredColumns.filter(col => 
-            !data[0] || !(col in data[0])
-        );
-        
-        if (missingColumns.length > 0) {
-            throw new Error(`缺少必需的列：${missingColumns.join(', ')}`);
-        }
+processData(data) {
+    if (!data || data.length === 0) {
+        throw new Error('Excel文件中没有数据');
+    }
 
-        // 过滤有库存的数据
-        const filteredData = data.filter(row => row['总库存'] > 0);
+    // 显示所有列名用于调试
+    const availableColumns = Object.keys(data[0]);
+    console.log('Excel文件中的列名:', availableColumns);
+
+    // 检查必需列
+    const requiredColumns = ['商品条码', 'Color', 'Size', '总库存'];
+    const missingColumns = requiredColumns.filter(col => 
+        !data[0] || !(col in data[0])
+    );
+    
+    if (missingColumns.length > 0) {
+        throw new Error(`缺少必需的列：${missingColumns.join(', ')}`);
+    }
+
+    // 过滤有库存的数据，且Color和Size不为空
+    const filteredData = data.filter(row => {
+        const stock = parseFloat(row['总库存']) || 0;
+        const color = row['Color'] ? row['Color'].toString().trim() : '';
+        const size = row['Size'] ? row['Size'].toString().trim() : '';
         
-        // 按商品条码和颜色分组
-        const grouped = {};
-        filteredData.forEach(row => {
-            const key = `${row['商品条码']}_${row['Color']}`;
+        return stock > 0 && color !== '' && size !== '';
+    });
+
+    console.log(`过滤后数据: ${filteredData.length} 行（排除库存为0或颜色尺寸为空的行）`);
+
+    if (filteredData.length === 0) {
+        throw new Error('没有找到有效的库存数据（请确保有库存>0且颜色和尺寸不为空的数据）');
+    }
+
+    // 按商品条码和颜色分组
+    const grouped = {};
+    filteredData.forEach(row => {
+        const productCode = row['商品条码'] ? row['商品条码'].toString().trim() : '';
+        const color = row['Color'] ? row['Color'].toString().trim() : '';
+        const size = row['Size'] ? row['Size'].toString().trim() : '';
+        
+        if (productCode && color) {
+            const key = `${productCode}_${color}`;
             if (!grouped[key]) {
                 grouped[key] = {
-                    productCode: row['商品条码'],
-                    color: row['Color'],
+                    productCode: productCode,
+                    color: color,
                     sizes: new Set()
                 };
             }
-            if (row['Size']) {
-                grouped[key].sizes.add(row['Size'].toString().trim());
+            if (size) {
+                grouped[key].sizes.add(size);
             }
-        });
-
-        // 转换并排序尺寸
-        const processedData = Object.values(grouped).map(item => ({
-            productCode: item.productCode,
-            color: item.color,
-            sizes: this.sortSizes(Array.from(item.sizes))
-        }));
-
-        if (processedData.length === 0) {
-            throw new Error('没有找到有效的库存数据');
         }
+    });
 
-        return processedData;
-    }
+    // 转换并排序尺寸
+    const processedData = Object.values(grouped).map(item => ({
+        productCode: item.productCode,
+        color: item.color,
+        sizes: this.sortSizes(Array.from(item.sizes))
+    }));
 
+    console.log(`处理后产品数量: ${processedData.length}`);
+    console.log('处理后的数据:', processedData);
+
+    return processedData;
+}
+  
     sortSizes(sizes) {
         const getSizeKey = (size) => {
             const sizeStr = size.toUpperCase();
