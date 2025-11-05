@@ -85,26 +85,59 @@ class InventoryReplenishmentGenerator {
         });
     }
 
-  // 过滤有库存的数据，跳过Color和Size为空的行（但不报错）
-const filteredData = data.filter(row => {
-    const stock = parseFloat(row[columnMap.stock]) || 0;
-    const color = row[columnMap.color] ? row[columnMap.color].toString().trim() : '';
-    const size = row[columnMap.size] ? row[columnMap.size].toString().trim() : '';
-    
-    // 有库存且颜色尺寸不为空
-    if (stock > 0 && color !== '' && size !== '') {
-        return true;
-    }
-    
-    // 有库存但颜色尺寸为空 - 记录但跳过
-    if (stock > 0 && (color === '' || size === '')) {
-        console.log('跳过空颜色/尺寸的行:', row[columnMap.productCode]);
-    }
-    
-    return false;
-});
+    processData(data) {
+        if (!data || data.length === 0) {
+            throw new Error('Excel文件中没有数据');
+        }
 
-        console.log(`过滤后数据: ${filteredData.length} 行`);
+        console.log('原始数据第一行:', data[0]);
+        console.log('所有列名:', Object.keys(data[0]));
+
+        // 直接使用正确的列名映射
+        const columnMap = {
+            productCode: '商品条码',
+            color: 'Color', 
+            size: 'Size',
+            stock: '总库存'
+        };
+
+        // 验证列是否存在
+        const availableColumns = Object.keys(data[0]);
+        const missingColumns = [];
+        
+        for (const [key, columnName] of Object.entries(columnMap)) {
+            if (!availableColumns.includes(columnName)) {
+                missingColumns.push(columnName);
+            }
+        }
+
+        if (missingColumns.length > 0) {
+            throw new Error(`缺少必需的列：${missingColumns.join(', ')}\n\n检测到的列名：${availableColumns.join(', ')}`);
+        }
+
+        console.log('列映射验证通过:', columnMap);
+
+        // 过滤有库存的数据，且Color和Size不为空
+        const filteredData = data.filter(row => {
+            const stock = parseFloat(row[columnMap.stock]) || 0;
+            const color = row[columnMap.color] ? row[columnMap.color].toString().trim() : '';
+            const size = row[columnMap.size] ? row[columnMap.size].toString().trim() : '';
+            const productCode = row[columnMap.productCode] ? row[columnMap.productCode].toString().trim() : '';
+            
+            // 跳过库存为0或颜色尺寸为空的行
+            if (stock <= 0) {
+                return false;
+            }
+            
+            if (color === '' || size === '') {
+                console.log('跳过颜色/尺寸为空的行:', productCode);
+                return false;
+            }
+            
+            return true;
+        });
+
+        console.log(`过滤后有效数据: ${filteredData.length} 行`);
 
         if (filteredData.length === 0) {
             throw new Error('没有找到有效的库存数据（请确保有库存>0且颜色和尺寸不为空的数据）');
@@ -113,23 +146,19 @@ const filteredData = data.filter(row => {
         // 按商品条码和颜色分组
         const grouped = {};
         filteredData.forEach(row => {
-            const productCode = row[columnMap.productCode] ? row[columnMap.productCode].toString().trim() : '';
-            const color = row[columnMap.color] ? row[columnMap.color].toString().trim() : '';
-            const size = row[columnMap.size] ? row[columnMap.size].toString().trim() : '';
+            const productCode = row[columnMap.productCode].toString().trim();
+            const color = row[columnMap.color].toString().trim();
+            const size = row[columnMap.size].toString().trim();
             
-            if (productCode && color) {
-                const key = `${productCode}_${color}`;
-                if (!grouped[key]) {
-                    grouped[key] = {
-                        productCode: productCode,
-                        color: color,
-                        sizes: new Set()
-                    };
-                }
-                if (size) {
-                    grouped[key].sizes.add(size);
-                }
+            const key = `${productCode}_${color}`;
+            if (!grouped[key]) {
+                grouped[key] = {
+                    productCode: productCode,
+                    color: color,
+                    sizes: new Set()
+                };
             }
+            grouped[key].sizes.add(size);
         });
 
         // 转换并排序尺寸
@@ -145,46 +174,20 @@ const filteredData = data.filter(row => {
         return processedData;
     }
 
-detectColumns(firstRow) {
-    const columns = Object.keys(firstRow);
-    const mapping = {
-        productCode: null,
-        color: null,
-        size: null,
-        stock: null
-    };
-
-    console.log('所有可用列名:', columns);
-
-    // 直接精确匹配列名（不检查第一行的值是否为空）
-    mapping.productCode = '商品条码';
-    mapping.color = 'Color';
-    mapping.size = 'Size'; 
-    mapping.stock = '总库存';
-
-    // 验证列名是否存在（不管值是否为空）
-    Object.keys(mapping).forEach(key => {
-        if (!columns.includes(mapping[key])) {
-            console.warn(`列 "${mapping[key]}" 不存在`);
-            mapping[key] = null;
-        } else {
-            console.log(`找到列 "${mapping[key]}":`, firstRow[mapping[key]]);
-        }
-    });
-
-    console.log('最终列映射:', mapping);
-    return mapping;
-}
-
     sortSizes(sizes) {
         const getSizeKey = (size) => {
-            const sizeStr = size.toUpperCase();
+            const sizeStr = size.toUpperCase().trim();
+            
+            // 精确匹配尺寸
             if (this.sizeOrder.hasOwnProperty(sizeStr)) {
                 return this.sizeOrder[sizeStr];
             }
-            if (!isNaN(sizeStr)) {
+            
+            // 处理纯数字尺寸
+            if (!isNaN(sizeStr) && sizeStr !== '') {
                 return parseInt(sizeStr) + 100;
             }
+            
             return 999;
         };
 
@@ -196,7 +199,8 @@ detectColumns(firstRow) {
         const vwProducts = [];
 
         data.forEach(item => {
-            if (item.productCode.toString().startsWith('VW')) {
+            const productCode = item.productCode.toString();
+            if (productCode.startsWith('VW')) {
                 vwProducts.push(item);
             } else {
                 vProducts.push(item);
@@ -218,11 +222,14 @@ detectColumns(firstRow) {
         const result = [];
         Object.keys(grouped).forEach(code => {
             const items = grouped[code];
+            
+            // 第一个产品显示编码
             result.push({
                 ...items[0],
                 showCode: true
             });
             
+            // 后续同编码产品不显示编码
             for (let i = 1; i < items.length; i++) {
                 result.push({
                     ...items[i],
@@ -270,6 +277,9 @@ detectColumns(firstRow) {
         let content = "库存补货清单\n\n";
         const timestamp = new Date().toLocaleString('zh-CN');
 
+        // 添加统计信息
+        content += `统计信息：共 ${this.processedData.length} 个产品（V系列: ${vProducts.length}个, VW系列: ${vwProducts.length}个）\n\n`;
+
         if (vProducts.length > 0) {
             content += "MENS audit list\n";
             content += "=".repeat(50) + "\n";
@@ -293,18 +303,24 @@ detectColumns(firstRow) {
         let content = "";
         const chunkSize = Math.ceil(products.length / 2);
         
+        // 表头
+        content += "商品条码\t颜色\t尺寸\n";
+        content += "-".repeat(50) + "\n";
+        
         for (let i = 0; i < chunkSize; i++) {
             const leftProduct = products[i];
             const rightProduct = products[i + chunkSize];
             
             let line = "";
             
+            // 左侧产品
             if (leftProduct) {
-                line += this.formatProductLine(leftProduct).padEnd(30);
+                line += this.formatProductLine(leftProduct).padEnd(35);
             } else {
-                line += "".padEnd(30);
+                line += "".padEnd(35);
             }
             
+            // 右侧产品
             if (rightProduct) {
                 line += this.formatProductLine(rightProduct);
             }
@@ -316,9 +332,9 @@ detectColumns(firstRow) {
     }
 
     formatProductLine(product) {
-        const code = product.showCode ? product.productCode : "";
+        const code = product.showCode ? product.productCode : "↑";
         const color = product.color || "";
-        const sizes = this.formatSizesText(product.sizes, 20);
+        const sizes = this.formatSizesText(product.sizes, 15);
         return `${code}\t${color}\t${sizes}`;
     }
 
@@ -342,8 +358,11 @@ detectColumns(firstRow) {
 
     showResult(data) {
         const { vProducts, vwProducts } = this.separateVandVWProducts(data);
-        document.getElementById('resultText').textContent = 
-            `处理完成！共找到 ${data.length} 个产品（V系列: ${vProducts.length}个, VW系列: ${vwProducts.length}个）`;
+        const resultText = `处理完成！共找到 ${data.length} 个产品组合
+        V系列: ${vProducts.length}个
+        VW系列: ${vwProducts.length}个`;
+        
+        document.getElementById('resultText').innerHTML = resultText.replace(/\n/g, '<br>');
         
         document.getElementById('progressArea').style.display = 'none';
         document.getElementById('resultArea').style.display = 'block';
@@ -358,6 +377,7 @@ detectColumns(firstRow) {
     }
 }
 
+// 全局函数
 function resetApp() {
     document.getElementById('fileInput').value = '';
     document.getElementById('uploadArea').style.display = 'block';
@@ -365,6 +385,7 @@ function resetApp() {
     document.getElementById('resultArea').style.display = 'none';
 }
 
+// 初始化应用
 let app;
 document.addEventListener('DOMContentLoaded', () => {
     app = new InventoryReplenishmentGenerator();
