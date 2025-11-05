@@ -85,37 +85,24 @@ class InventoryReplenishmentGenerator {
         });
     }
 
-    processData(data) {
-        if (!data || data.length === 0) {
-            throw new Error('Excel文件中没有数据');
-        }
-
-        console.log('原始数据第一行:', data[0]);
-        console.log('所有列名:', Object.keys(data[0]));
-
-        // 智能列名映射
-        const columnMap = this.detectColumns(data[0]);
-        console.log('检测到的列映射:', columnMap);
-
-        // 检查必需列
-        const missingColumns = [];
-        if (!columnMap.productCode) missingColumns.push('商品条码');
-        if (!columnMap.color) missingColumns.push('Color');
-        if (!columnMap.size) missingColumns.push('Size');
-        if (!columnMap.stock) missingColumns.push('总库存');
-
-        if (missingColumns.length > 0) {
-            throw new Error(`缺少必需的列：${missingColumns.join(', ')}\n\n检测到的列名：${Object.keys(data[0]).join(', ')}`);
-        }
-
-        // 过滤有库存的数据，且Color和Size不为空
-        const filteredData = data.filter(row => {
-            const stock = parseFloat(row[columnMap.stock]) || 0;
-            const color = row[columnMap.color] ? row[columnMap.color].toString().trim() : '';
-            const size = row[columnMap.size] ? row[columnMap.size].toString().trim() : '';
-            
-            return stock > 0 && color !== '' && size !== '';
-        });
+  // 过滤有库存的数据，跳过Color和Size为空的行（但不报错）
+const filteredData = data.filter(row => {
+    const stock = parseFloat(row[columnMap.stock]) || 0;
+    const color = row[columnMap.color] ? row[columnMap.color].toString().trim() : '';
+    const size = row[columnMap.size] ? row[columnMap.size].toString().trim() : '';
+    
+    // 有库存且颜色尺寸不为空
+    if (stock > 0 && color !== '' && size !== '') {
+        return true;
+    }
+    
+    // 有库存但颜色尺寸为空 - 记录但跳过
+    if (stock > 0 && (color === '' || size === '')) {
+        console.log('跳过空颜色/尺寸的行:', row[columnMap.productCode]);
+    }
+    
+    return false;
+});
 
         console.log(`过滤后数据: ${filteredData.length} 行`);
 
@@ -158,38 +145,36 @@ class InventoryReplenishmentGenerator {
         return processedData;
     }
 
-    detectColumns(firstRow) {
-        const columns = Object.keys(firstRow);
-        const mapping = {
-            productCode: null,
-            color: null,
-            size: null,
-            stock: null
-        };
+detectColumns(firstRow) {
+    const columns = Object.keys(firstRow);
+    const mapping = {
+        productCode: null,
+        color: null,
+        size: null,
+        stock: null
+    };
 
-        // 定义可能的列名匹配
-        const patterns = {
-            productCode: ['商品条码', '条码', 'sku', 'code', '商品编码'],
-            color: ['color', '颜色', 'colour', '色号'],
-            size: ['size', '尺码', '尺寸', '规格'],
-            stock: ['总库存', '库存', 'stock', 'quantity', '库存数']
-        };
+    console.log('所有可用列名:', columns);
 
-        // 为每个类型找到匹配的列
-        Object.keys(patterns).forEach(key => {
-            for (const pattern of patterns[key]) {
-                const found = columns.find(col => 
-                    col.toLowerCase().includes(pattern.toLowerCase())
-                );
-                if (found) {
-                    mapping[key] = found;
-                    break;
-                }
-            }
-        });
+    // 直接精确匹配列名（不检查第一行的值是否为空）
+    mapping.productCode = '商品条码';
+    mapping.color = 'Color';
+    mapping.size = 'Size'; 
+    mapping.stock = '总库存';
 
-        return mapping;
-    }
+    // 验证列名是否存在（不管值是否为空）
+    Object.keys(mapping).forEach(key => {
+        if (!columns.includes(mapping[key])) {
+            console.warn(`列 "${mapping[key]}" 不存在`);
+            mapping[key] = null;
+        } else {
+            console.log(`找到列 "${mapping[key]}":`, firstRow[mapping[key]]);
+        }
+    });
+
+    console.log('最终列映射:', mapping);
+    return mapping;
+}
 
     sortSizes(sizes) {
         const getSizeKey = (size) => {
