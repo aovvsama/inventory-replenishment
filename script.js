@@ -5,7 +5,6 @@ class InventoryReplenishmentGenerator {
             '28': 7, '29': 8, '30': 9, '31': 10, '32': 11, '33': 12,
             '34': 13, '36': 14, '38': 15, 'ONS': 16
         };
-        this.doc = null;
         this.processedData = null;
         
         this.initializeEventListeners();
@@ -15,14 +14,12 @@ class InventoryReplenishmentGenerator {
         const fileInput = document.getElementById('fileInput');
         const uploadArea = document.getElementById('uploadArea');
 
-        // 文件选择事件
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 this.handleFileSelect(e.target.files[0]);
             }
         });
 
-        // 拖放事件
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
             uploadArea.classList.add('dragover');
@@ -55,9 +52,9 @@ class InventoryReplenishmentGenerator {
             this.updateProgress(40, '正在处理数据...');
             
             const processedData = this.processData(data);
-            this.updateProgress(70, '正在生成Word文档...');
+            this.updateProgress(70, '正在生成文档...');
             
-            await this.generateWordDocument(processedData);
+            this.processedData = processedData;
             this.updateProgress(100, '处理完成！');
             
             this.showResult(processedData);
@@ -88,75 +85,112 @@ class InventoryReplenishmentGenerator {
         });
     }
 
-processData(data) {
-    if (!data || data.length === 0) {
-        throw new Error('Excel文件中没有数据');
-    }
-
-    // 显示所有列名用于调试
-    const availableColumns = Object.keys(data[0]);
-    console.log('Excel文件中的列名:', availableColumns);
-
-    // 检查必需列
-    const requiredColumns = ['商品条码', 'Color', 'Size', '总库存'];
-    const missingColumns = requiredColumns.filter(col => 
-        !data[0] || !(col in data[0])
-    );
-    
-    if (missingColumns.length > 0) {
-        throw new Error(`缺少必需的列：${missingColumns.join(', ')}`);
-    }
-
-    // 过滤有库存的数据，且Color和Size不为空
-    const filteredData = data.filter(row => {
-        const stock = parseFloat(row['总库存']) || 0;
-        const color = row['Color'] ? row['Color'].toString().trim() : '';
-        const size = row['Size'] ? row['Size'].toString().trim() : '';
-        
-        return stock > 0 && color !== '' && size !== '';
-    });
-
-    console.log(`过滤后数据: ${filteredData.length} 行（排除库存为0或颜色尺寸为空的行）`);
-
-    if (filteredData.length === 0) {
-        throw new Error('没有找到有效的库存数据（请确保有库存>0且颜色和尺寸不为空的数据）');
-    }
-
-    // 按商品条码和颜色分组
-    const grouped = {};
-    filteredData.forEach(row => {
-        const productCode = row['商品条码'] ? row['商品条码'].toString().trim() : '';
-        const color = row['Color'] ? row['Color'].toString().trim() : '';
-        const size = row['Size'] ? row['Size'].toString().trim() : '';
-        
-        if (productCode && color) {
-            const key = `${productCode}_${color}`;
-            if (!grouped[key]) {
-                grouped[key] = {
-                    productCode: productCode,
-                    color: color,
-                    sizes: new Set()
-                };
-            }
-            if (size) {
-                grouped[key].sizes.add(size);
-            }
+    processData(data) {
+        if (!data || data.length === 0) {
+            throw new Error('Excel文件中没有数据');
         }
-    });
 
-    // 转换并排序尺寸
-    const processedData = Object.values(grouped).map(item => ({
-        productCode: item.productCode,
-        color: item.color,
-        sizes: this.sortSizes(Array.from(item.sizes))
-    }));
+        console.log('原始数据第一行:', data[0]);
+        console.log('所有列名:', Object.keys(data[0]));
 
-    console.log(`处理后产品数量: ${processedData.length}`);
-    console.log('处理后的数据:', processedData);
+        // 智能列名映射
+        const columnMap = this.detectColumns(data[0]);
+        console.log('检测到的列映射:', columnMap);
 
-    return processedData;
-}
-  
+        // 检查必需列
+        const missingColumns = [];
+        if (!columnMap.productCode) missingColumns.push('商品条码');
+        if (!columnMap.color) missingColumns.push('Color');
+        if (!columnMap.size) missingColumns.push('Size');
+        if (!columnMap.stock) missingColumns.push('总库存');
+
+        if (missingColumns.length > 0) {
+            throw new Error(`缺少必需的列：${missingColumns.join(', ')}\n\n检测到的列名：${Object.keys(data[0]).join(', ')}`);
+        }
+
+        // 过滤有库存的数据，且Color和Size不为空
+        const filteredData = data.filter(row => {
+            const stock = parseFloat(row[columnMap.stock]) || 0;
+            const color = row[columnMap.color] ? row[columnMap.color].toString().trim() : '';
+            const size = row[columnMap.size] ? row[columnMap.size].toString().trim() : '';
+            
+            return stock > 0 && color !== '' && size !== '';
+        });
+
+        console.log(`过滤后数据: ${filteredData.length} 行`);
+
+        if (filteredData.length === 0) {
+            throw new Error('没有找到有效的库存数据（请确保有库存>0且颜色和尺寸不为空的数据）');
+        }
+
+        // 按商品条码和颜色分组
+        const grouped = {};
+        filteredData.forEach(row => {
+            const productCode = row[columnMap.productCode] ? row[columnMap.productCode].toString().trim() : '';
+            const color = row[columnMap.color] ? row[columnMap.color].toString().trim() : '';
+            const size = row[columnMap.size] ? row[columnMap.size].toString().trim() : '';
+            
+            if (productCode && color) {
+                const key = `${productCode}_${color}`;
+                if (!grouped[key]) {
+                    grouped[key] = {
+                        productCode: productCode,
+                        color: color,
+                        sizes: new Set()
+                    };
+                }
+                if (size) {
+                    grouped[key].sizes.add(size);
+                }
+            }
+        });
+
+        // 转换并排序尺寸
+        const processedData = Object.values(grouped).map(item => ({
+            productCode: item.productCode,
+            color: item.color,
+            sizes: this.sortSizes(Array.from(item.sizes))
+        }));
+
+        console.log(`处理后产品数量: ${processedData.length}`);
+        console.log('处理后的数据:', processedData);
+
+        return processedData;
+    }
+
+    detectColumns(firstRow) {
+        const columns = Object.keys(firstRow);
+        const mapping = {
+            productCode: null,
+            color: null,
+            size: null,
+            stock: null
+        };
+
+        // 定义可能的列名匹配
+        const patterns = {
+            productCode: ['商品条码', '条码', 'sku', 'code', '商品编码'],
+            color: ['color', '颜色', 'colour', '色号'],
+            size: ['size', '尺码', '尺寸', '规格'],
+            stock: ['总库存', '库存', 'stock', 'quantity', '库存数']
+        };
+
+        // 为每个类型找到匹配的列
+        Object.keys(patterns).forEach(key => {
+            for (const pattern of patterns[key]) {
+                const found = columns.find(col => 
+                    col.toLowerCase().includes(pattern.toLowerCase())
+                );
+                if (found) {
+                    mapping[key] = found;
+                    break;
+                }
+            }
+        });
+
+        return mapping;
+    }
+
     sortSizes(sizes) {
         const getSizeKey = (size) => {
             const sizeStr = size.toUpperCase();
@@ -164,7 +198,7 @@ processData(data) {
                 return this.sizeOrder[sizeStr];
             }
             if (!isNaN(sizeStr)) {
-                return parseInt(sizeStr) + 100; // 数字尺寸排在后面
+                return parseInt(sizeStr) + 100;
             }
             return 999;
         };
@@ -246,16 +280,8 @@ processData(data) {
         return lines.join("\n");
     }
 
-    async generateWordDocument(processedData) {
-        const { vProducts, vwProducts } = this.separateVandVWProducts(processedData);
-        
-        // 这里使用docx.js创建Word文档
-        // 由于docx.js在浏览器中使用较复杂，我们使用简化方案
-        this.processedData = { vProducts, vwProducts };
-    }
-
     generateOutputContent() {
-        const { vProducts, vwProducts } = this.processedData;
+        const { vProducts, vwProducts } = this.separateVandVWProducts(this.processedData);
         let content = "库存补货清单\n\n";
         const timestamp = new Date().toLocaleString('zh-CN');
 
@@ -288,14 +314,12 @@ processData(data) {
             
             let line = "";
             
-            // 左侧产品
             if (leftProduct) {
                 line += this.formatProductLine(leftProduct).padEnd(30);
             } else {
                 line += "".padEnd(30);
             }
             
-            // 右侧产品
             if (rightProduct) {
                 line += this.formatProductLine(rightProduct);
             }
@@ -339,7 +363,6 @@ processData(data) {
         document.getElementById('progressArea').style.display = 'none';
         document.getElementById('resultArea').style.display = 'block';
         
-        // 设置下载按钮事件
         document.getElementById('downloadBtn').onclick = () => this.downloadWordDocument();
     }
 
@@ -350,7 +373,6 @@ processData(data) {
     }
 }
 
-// 全局函数
 function resetApp() {
     document.getElementById('fileInput').value = '';
     document.getElementById('uploadArea').style.display = 'block';
@@ -358,7 +380,6 @@ function resetApp() {
     document.getElementById('resultArea').style.display = 'none';
 }
 
-// 初始化应用
 let app;
 document.addEventListener('DOMContentLoaded', () => {
     app = new InventoryReplenishmentGenerator();
