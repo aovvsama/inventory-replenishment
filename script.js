@@ -186,6 +186,15 @@ class InventoryReplenishmentGenerator {
         return sizes.sort((a, b) => getSizeKey(a) - getSizeKey(b));
     }
 
+    // 按商品条码排序
+    sortProductsByCode(products) {
+        return products.sort((a, b) => {
+            const codeA = a.productCode.toString();
+            const codeB = b.productCode.toString();
+            return codeA.localeCompare(codeB);
+        });
+    }
+
     separateVandVWProducts(data) {
         const vProducts = [];
         const vwProducts = [];
@@ -199,7 +208,11 @@ class InventoryReplenishmentGenerator {
             }
         });
 
-        return { vProducts, vwProducts };
+        // 按商品条码排序
+        return {
+            vProducts: this.sortProductsByCode(vProducts),
+            vwProducts: this.sortProductsByCode(vwProducts)
+        };
     }
 
     groupProductsByCode(products) {
@@ -260,6 +273,39 @@ class InventoryReplenishmentGenerator {
         }
 
         return lines.join("\n");
+    }
+
+    // 为A4长边翻折布局重新组织数据
+    organizeForBookletLayout(products) {
+        const groupedProducts = this.groupProductsByCode(products);
+        const result = [];
+        
+        // 每页显示的产品数量（根据你的需求调整）
+        const productsPerPage = 20;
+        const totalPages = Math.ceil(groupedProducts.length / productsPerPage);
+        
+        for (let page = 0; page < totalPages; page++) {
+            const startIdx = page * productsPerPage;
+            const endIdx = startIdx + productsPerPage;
+            const pageProducts = groupedProducts.slice(startIdx, endIdx);
+            
+            // 每页分成左右两栏
+            const productsPerColumn = Math.ceil(pageProducts.length / 2);
+            
+            for (let i = 0; i < productsPerColumn; i++) {
+                const leftProduct = pageProducts[i];
+                const rightProduct = pageProducts[i + productsPerColumn];
+                
+                result.push({
+                    left: leftProduct,
+                    right: rightProduct,
+                    page: page + 1,
+                    row: i + 1
+                });
+            }
+        }
+        
+        return result;
     }
 
     async generateWordDocument() {
@@ -370,13 +416,18 @@ class InventoryReplenishmentGenerator {
             sections: [{
                 properties: {
                     page: {
+                        size: {
+                            width: 11906,  // A4纸宽度 (21cm)
+                            height: 16838  // A4纸高度 (29.7cm)
+                        },
                         margin: {
                             top: 800,
                             right: 800,
                             bottom: 800,
                             left: 800,
                         }
-                    }
+                    },
+                    pageOrientation: docx.PageOrientation.LANDSCAPE // 横向布局，适合长边翻折
                 },
                 children: docChildren
             }]
@@ -394,31 +445,48 @@ class InventoryReplenishmentGenerator {
         // 添加表头
         const headerRow = new docx.TableRow({
             children: [
-                this.createTableCell("商品条码", true),
-                this.createTableCell("颜色", true),
-                this.createTableCell("尺寸", true),
-                this.createTableCell("商品条码", true),
-                this.createTableCell("颜色", true),
-                this.createTableCell("尺寸", true)
+                this.createTableCell("商品条码", true, "25%"),
+                this.createTableCell("颜色", true, "15%"),
+                this.createTableCell("尺寸", true, "35%"),
+                this.createTableCell("商品条码", true, "25%"),
+                this.createTableCell("颜色", true, "15%"),
+                this.createTableCell("尺寸", true, "35%")
             ]
         });
         tableRows.push(headerRow);
 
-        // 添加产品数据
+        // 添加分隔线
+        const separatorRow = new docx.TableRow({
+            children: [
+                this.createTableCell("─".repeat(20), false, "25%"),
+                this.createTableCell("─".repeat(10), false, "15%"),
+                this.createTableCell("─".repeat(30), false, "35%"),
+                this.createTableCell("─".repeat(20), false, "25%"),
+                this.createTableCell("─".repeat(10), false, "15%"),
+                this.createTableCell("─".repeat(30), false, "35%")
+            ]
+        });
+        tableRows.push(separatorRow);
+
+        // 添加产品数据 - 按排序后的顺序
         for (let i = 0; i < productsPerColumn; i++) {
             const leftProduct = groupedProducts[i];
             const rightProduct = groupedProducts[i + productsPerColumn];
-            const bgColor = i % 2 === 0 ? "F5F5F5" : "FFFFFF";
+            const bgColor = i % 2 === 0 ? "F8F8F8" : "FFFFFF";
 
             const row = new docx.TableRow({
                 children: [
-                    this.createProductCell(leftProduct, bgColor),
-                    this.createColorCell(leftProduct, bgColor),
-                    this.createSizesCell(leftProduct, bgColor),
-                    this.createProductCell(rightProduct, bgColor),
-                    this.createColorCell(rightProduct, bgColor),
-                    this.createSizesCell(rightProduct, bgColor)
-                ]
+                    this.createProductCell(leftProduct, bgColor, "25%"),
+                    this.createColorCell(leftProduct, bgColor, "15%"),
+                    this.createSizesCell(leftProduct, bgColor, "35%"),
+                    this.createProductCell(rightProduct, bgColor, "25%"),
+                    this.createColorCell(rightProduct, bgColor, "15%"),
+                    this.createSizesCell(rightProduct, bgColor, "35%")
+                ],
+                height: {
+                    value: 800, // 行高
+                    rule: docx.HeightRule.ATLEAST
+                }
             });
             tableRows.push(row);
         }
@@ -428,18 +496,27 @@ class InventoryReplenishmentGenerator {
                 size: 100,
                 type: docx.WidthType.PERCENTAGE,
             },
-            borders: docx.TableBorders.NONE,
+            borders: {
+                top: { style: docx.BorderStyle.SINGLE, size: 1, color: "000000" },
+                bottom: { style: docx.BorderStyle.SINGLE, size: 1, color: "000000" },
+                left: { style: docx.BorderStyle.SINGLE, size: 1, color: "000000" },
+                right: { style: docx.BorderStyle.SINGLE, size: 1, color: "000000" },
+                insideHorizontal: { style: docx.BorderStyle.SINGLE, size: 1, color: "E0E0E0" },
+                insideVertical: { style: docx.BorderStyle.SINGLE, size: 1, color: "E0E0E0" },
+            },
             rows: tableRows
         });
 
         return table;
     }
 
-    createTableCell(text, isHeader = false) {
+    createTableCell(text, isHeader = false, width = "16%") {
+        const widthValue = parseInt(width);
         return new docx.TableCell({
-            width: { size: 16, type: docx.WidthType.PERCENTAGE },
+            width: { size: widthValue, type: docx.WidthType.PERCENTAGE },
             margins: { top: 100, bottom: 100, left: 100, right: 100 },
-            shading: isHeader ? { fill: "E0E0E0" } : undefined,
+            shading: isHeader ? { fill: "E8E8E8" } : undefined,
+            verticalAlign: docx.VerticalAlign.CENTER,
             children: [
                 new docx.Paragraph({
                     children: [
@@ -450,25 +527,32 @@ class InventoryReplenishmentGenerator {
                             bold: isHeader
                         })
                     ],
-                    alignment: docx.AlignmentType.LEFT
+                    alignment: docx.AlignmentType.LEFT,
+                    spacing: { line: 300 } // 行间距
                 })
             ]
         });
     }
 
-    createProductCell(product, bgColor) {
-        const text = product ? (product.showCode ? product.productCode : "") : "";
-        return this.createTableCell(text, false, bgColor);
+    createProductCell(product, bgColor, width) {
+        const text = product ? (product.showCode ? product.productCode : "↑") : "";
+        const cell = this.createTableCell(text, false, width);
+        cell.shading = { fill: bgColor };
+        return cell;
     }
 
-    createColorCell(product, bgColor) {
+    createColorCell(product, bgColor, width) {
         const text = product ? product.color : "";
-        return this.createTableCell(text, false, bgColor);
+        const cell = this.createTableCell(text, false, width);
+        cell.shading = { fill: bgColor };
+        return cell;
     }
 
-    createSizesCell(product, bgColor) {
+    createSizesCell(product, bgColor, width) {
         const text = product ? this.formatSizesText(product.sizes, 20) : "";
-        return this.createTableCell(text, false, bgColor);
+        const cell = this.createTableCell(text, false, width);
+        cell.shading = { fill: bgColor };
+        return cell;
     }
 
     async downloadWordDocument() {
@@ -507,7 +591,7 @@ class InventoryReplenishmentGenerator {
 
         if (vProducts.length > 0) {
             content += "MENS audit list\n";
-            content += "=".repeat(50) + "\n";
+            content += "=".repeat(80) + "\n";
             const groupedV = this.groupProductsByCode(vProducts);
             content += this.formatProductsForText(groupedV);
             content += "\n\n";
@@ -515,7 +599,7 @@ class InventoryReplenishmentGenerator {
 
         if (vwProducts.length > 0) {
             content += "WOMENS audit list\n";
-            content += "=".repeat(50) + "\n";
+            content += "=".repeat(80) + "\n";
             const groupedVW = this.groupProductsByCode(vwProducts);
             content += this.formatProductsForText(groupedVW);
         }
@@ -528,8 +612,9 @@ class InventoryReplenishmentGenerator {
         let content = "";
         const chunkSize = Math.ceil(products.length / 2);
         
-        content += "商品条码\t颜色\t尺寸\n";
-        content += "-".repeat(50) + "\n";
+        content += "商品条码".padEnd(15) + "颜色".padEnd(10) + "尺寸".padEnd(25) + " ".padEnd(10) +
+                  "商品条码".padEnd(15) + "颜色".padEnd(10) + "尺寸\n";
+        content += "─".repeat(80) + "\n";
         
         for (let i = 0; i < chunkSize; i++) {
             const leftProduct = products[i];
@@ -537,12 +622,14 @@ class InventoryReplenishmentGenerator {
             
             let line = "";
             
+            // 左侧产品
             if (leftProduct) {
-                line += this.formatProductLine(leftProduct).padEnd(35);
+                line += this.formatProductLine(leftProduct).padEnd(50);
             } else {
-                line += "".padEnd(35);
+                line += "".padEnd(50);
             }
             
+            // 右侧产品
             if (rightProduct) {
                 line += this.formatProductLine(rightProduct);
             }
@@ -556,8 +643,8 @@ class InventoryReplenishmentGenerator {
     formatProductLine(product) {
         const code = product.showCode ? product.productCode : "↑";
         const color = product.color || "";
-        const sizes = this.formatSizesText(product.sizes, 15);
-        return `${code}\t${color}\t${sizes}`;
+        const sizes = this.formatSizesText(product.sizes, 20);
+        return `${code.padEnd(15)}${color.padEnd(10)}${sizes.padEnd(25)}`;
     }
 
     showProgress() {
@@ -575,7 +662,12 @@ class InventoryReplenishmentGenerator {
         const { vProducts, vwProducts } = this.separateVandVWProducts(data);
         const resultText = `处理完成！共找到 ${data.length} 个产品组合
 V系列: ${vProducts.length}个
-VW系列: ${vwProducts.length}个`;
+VW系列: ${vwProducts.length}个
+        
+文档已按商品条码排序，适合A4纸长边翻折打印：
+• 第一页左侧 → 右侧
+• 第二页左侧 → 右侧
+• 以此类推...`;
         
         document.getElementById('resultText').innerHTML = resultText.replace(/\n/g, '<br>');
         
