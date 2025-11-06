@@ -248,19 +248,21 @@ class InventoryReplenishmentGenerator {
         const vwProducts = separatedProducts.vwProducts;
         
         const docChildren = [];
-        
+        let currentPage = 1;
+
+        // 添加标题页
         docChildren.push(
             new docx.Paragraph({
                 children: [
                     new docx.TextRun({
                         text: "库存补货清单",
                         bold: true,
-                        size: 24,
+                        size: 28,
                         font: "微软雅黑"
                     })
                 ],
                 alignment: docx.AlignmentType.CENTER,
-                spacing: { after: 200 }
+                spacing: { after: 400 }
             })
         );
 
@@ -275,7 +277,7 @@ class InventoryReplenishmentGenerator {
                     })
                 ],
                 alignment: docx.AlignmentType.LEFT,
-                spacing: { after: 200 }
+                spacing: { after: 300 }
             })
         );
 
@@ -289,16 +291,23 @@ class InventoryReplenishmentGenerator {
                         bold: true
                     })
                 ],
-                spacing: { after: 200 }
+                spacing: { after: 400 }
             })
         );
 
+        // 添加V系列产品
         if (vProducts.length > 0) {
+            // 确保V系列从新页面开始
+            if (currentPage > 1) {
+                docChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
+                currentPage++;
+            }
+
             docChildren.push(
                 new docx.Paragraph({
                     children: [
                         new docx.TextRun({
-                            text: "MENS audit list",
+                            text: "MENS audit list - 第" + currentPage + "页",
                             bold: true,
                             size: 18,
                             font: "微软雅黑"
@@ -309,24 +318,45 @@ class InventoryReplenishmentGenerator {
                 })
             );
 
-            const vTable = this.createProductTable(vProducts);
-            docChildren.push(vTable);
+            const vTables = this.createProductTablesWithPagination(vProducts, "V");
+            vTables.forEach((table, index) => {
+                if (index > 0) {
+                    docChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
+                    currentPage++;
+                    docChildren.push(
+                        new docx.Paragraph({
+                            children: [
+                                new docx.TextRun({
+                                    text: "MENS audit list - 第" + currentPage + "页",
+                                    bold: true,
+                                    size: 18,
+                                    font: "微软雅黑"
+                                })
+                            ],
+                            alignment: docx.AlignmentType.CENTER,
+                            spacing: { after: 200 }
+                        })
+                    );
+                }
+                docChildren.push(table);
+            });
+
+            currentPage++;
         }
 
+        // 确保VW系列从奇数页开始
         if (vwProducts.length > 0) {
-            docChildren.push(
-                new docx.Paragraph({
-                    children: [
-                        new docx.PageBreak()
-                    ]
-                })
-            );
+            // 如果当前页是偶数页，添加空白页
+            if (currentPage % 2 === 0) {
+                docChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
+                currentPage++;
+            }
 
             docChildren.push(
                 new docx.Paragraph({
                     children: [
                         new docx.TextRun({
-                            text: "WOMENS audit list",
+                            text: "WOMENS audit list - 第" + currentPage + "页",
                             bold: true,
                             size: 18,
                             font: "微软雅黑"
@@ -337,8 +367,28 @@ class InventoryReplenishmentGenerator {
                 })
             );
 
-            const vwTable = this.createProductTable(vwProducts);
-            docChildren.push(vwTable);
+            const vwTables = this.createProductTablesWithPagination(vwProducts, "VW");
+            vwTables.forEach((table, index) => {
+                if (index > 0) {
+                    docChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
+                    currentPage++;
+                    docChildren.push(
+                        new docx.Paragraph({
+                            children: [
+                                new docx.TextRun({
+                                    text: "WOMENS audit list - 第" + currentPage + "页",
+                                    bold: true,
+                                    size: 18,
+                                    font: "微软雅黑"
+                                })
+                            ],
+                            alignment: docx.AlignmentType.CENTER,
+                            spacing: { after: 200 }
+                        })
+                    );
+                }
+                docChildren.push(table);
+            });
         }
 
         const doc = new docx.Document({
@@ -365,10 +415,28 @@ class InventoryReplenishmentGenerator {
         return doc;
     }
 
-    createProductTable(products) {
+    createProductTablesWithPagination(products, type) {
         const groupedProducts = this.groupProductsByCode(products);
-        const productsPerColumn = Math.ceil(groupedProducts.length / 2);
+        const tables = [];
+        
+        // 每页显示的行数（根据实际调整）
+        const rowsPerPage = 20;
+        const totalPages = Math.ceil(groupedProducts.length / rowsPerPage);
 
+        for (let page = 0; page < totalPages; page++) {
+            const startIdx = page * rowsPerPage;
+            const endIdx = startIdx + rowsPerPage;
+            const pageProducts = groupedProducts.slice(startIdx, endIdx);
+            
+            const table = this.createProductTable(pageProducts);
+            tables.push(table);
+        }
+
+        return tables;
+    }
+
+    createProductTable(products) {
+        const productsPerColumn = Math.ceil(products.length / 2);
         const tableRows = [];
 
         const headerRow = new docx.TableRow({
@@ -388,8 +456,8 @@ class InventoryReplenishmentGenerator {
         tableRows.push(headerRow);
 
         for (let i = 0; i < productsPerColumn; i++) {
-            const leftProduct = groupedProducts[i];
-            const rightProduct = groupedProducts[i + productsPerColumn];
+            const leftProduct = products[i];
+            const rightProduct = products[i + productsPerColumn];
             const bgColor = i % 2 === 0 ? "F8F8F8" : "FFFFFF";
 
             const row = new docx.TableRow({
@@ -489,11 +557,12 @@ class InventoryReplenishmentGenerator {
             const stock = sizeStock[1];
             const separator = index < sizesWithStock.length - 1 ? " " : "";
             
-            if (stock > 2) {
+            // 修正：库存 < 2 时标红
+            if (stock < 2) {
                 paragraphChildren.push(
                     new docx.TextRun({
                         text: size,
-                        color: "FF0000",
+                        color: "FF0000", // 红色
                         size: 14,
                         font: "微软雅黑"
                     })
@@ -502,7 +571,7 @@ class InventoryReplenishmentGenerator {
                 paragraphChildren.push(
                     new docx.TextRun({
                         text: size,
-                        color: "000000",
+                        color: "000000", // 黑色
                         size: 14,
                         font: "微软雅黑"
                     })
@@ -583,11 +652,10 @@ class InventoryReplenishmentGenerator {
                          'V系列: ' + vProducts.length + '个\n' +
                          'VW系列: ' + vwProducts.length + '个\n\n' +
                          '✅ 优化特性：\n' +
-                         '• 压缩商品条码和颜色列宽度\n' +
-                         '• 增加尺码列显示空间\n' +
-                         '• 删除↑符号，同款后续行留空\n' +
-                         '• 库存>2的尺码显示为红色\n' +
-                         '• 均衡左右两栏宽度';
+                         '• 库存<2的尺码显示为红色（需要补货）\n' +
+                         '• 添加页码标注\n' +
+                         '• VW系列从奇数页开始，便于双面打印\n' +
+                         '• 第一页左右，第二页左右...的顺序排列';
         
         document.getElementById('resultText').innerHTML = resultText.replace(/\n/g, '<br>');
         
