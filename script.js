@@ -213,6 +213,26 @@ class InventoryReplenishmentGenerator {
         };
     }
 
+    // 按阅读顺序重新组织产品（先左栏后右栏）
+    organizeForReadingOrder(products) {
+        const groupedProducts = this.groupProductsByCode(products);
+        const result = [];
+        const totalProducts = groupedProducts.length;
+        const half = Math.ceil(totalProducts / 2);
+        
+        // 左栏：前一半产品
+        for (let i = 0; i < half; i++) {
+            result.push(groupedProducts[i]);
+        }
+        
+        // 右栏：后一半产品
+        for (let i = half; i < totalProducts; i++) {
+            result.push(groupedProducts[i]);
+        }
+        
+        return result;
+    }
+
     groupProductsByCode(products) {
         const grouped = {};
         products.forEach(product => {
@@ -248,21 +268,21 @@ class InventoryReplenishmentGenerator {
         const vwProducts = separatedProducts.vwProducts;
         
         const docChildren = [];
-        let currentPage = 1;
+        let pageNumber = 1;
 
-        // 添加标题页
+        // 添加标题
         docChildren.push(
             new docx.Paragraph({
                 children: [
                     new docx.TextRun({
-                        text: "库存补货清单",
+                        text: "库存补货清单 - 第" + pageNumber + "页",
                         bold: true,
-                        size: 28,
+                        size: 24,
                         font: "微软雅黑"
                     })
                 ],
                 alignment: docx.AlignmentType.CENTER,
-                spacing: { after: 400 }
+                spacing: { after: 200 }
             })
         );
 
@@ -277,7 +297,7 @@ class InventoryReplenishmentGenerator {
                     })
                 ],
                 alignment: docx.AlignmentType.LEFT,
-                spacing: { after: 300 }
+                spacing: { after: 200 }
             })
         );
 
@@ -291,23 +311,17 @@ class InventoryReplenishmentGenerator {
                         bold: true
                     })
                 ],
-                spacing: { after: 400 }
+                spacing: { after: 200 }
             })
         );
 
         // 添加V系列产品
         if (vProducts.length > 0) {
-            // 确保V系列从新页面开始
-            if (currentPage > 1) {
-                docChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
-                currentPage++;
-            }
-
             docChildren.push(
                 new docx.Paragraph({
                     children: [
                         new docx.TextRun({
-                            text: "MENS audit list - 第" + currentPage + "页",
+                            text: "MENS audit list",
                             bold: true,
                             size: 18,
                             font: "微软雅黑"
@@ -318,45 +332,29 @@ class InventoryReplenishmentGenerator {
                 })
             );
 
-            const vTables = this.createProductTablesWithPagination(vProducts, "V");
-            vTables.forEach((table, index) => {
-                if (index > 0) {
-                    docChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
-                    currentPage++;
-                    docChildren.push(
-                        new docx.Paragraph({
-                            children: [
-                                new docx.TextRun({
-                                    text: "MENS audit list - 第" + currentPage + "页",
-                                    bold: true,
-                                    size: 18,
-                                    font: "微软雅黑"
-                                })
-                            ],
-                            alignment: docx.AlignmentType.CENTER,
-                            spacing: { after: 200 }
-                        })
-                    );
-                }
-                docChildren.push(table);
-            });
-
-            currentPage++;
+            // 按阅读顺序组织V系列产品
+            const readingOrderVProducts = this.organizeForReadingOrder(vProducts);
+            const vTable = this.createProductTable(readingOrderVProducts);
+            docChildren.push(vTable);
         }
 
-        // 确保VW系列从奇数页开始
+        // 添加分页符（如果有VW系列产品）
         if (vwProducts.length > 0) {
-            // 如果当前页是偶数页，添加空白页
-            if (currentPage % 2 === 0) {
-                docChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
-                currentPage++;
-            }
+            docChildren.push(
+                new docx.Paragraph({
+                    children: [
+                        new docx.PageBreak()
+                    ]
+                })
+            );
+
+            pageNumber++;
 
             docChildren.push(
                 new docx.Paragraph({
                     children: [
                         new docx.TextRun({
-                            text: "WOMENS audit list - 第" + currentPage + "页",
+                            text: "WOMENS audit list - 第" + pageNumber + "页",
                             bold: true,
                             size: 18,
                             font: "微软雅黑"
@@ -367,28 +365,10 @@ class InventoryReplenishmentGenerator {
                 })
             );
 
-            const vwTables = this.createProductTablesWithPagination(vwProducts, "VW");
-            vwTables.forEach((table, index) => {
-                if (index > 0) {
-                    docChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
-                    currentPage++;
-                    docChildren.push(
-                        new docx.Paragraph({
-                            children: [
-                                new docx.TextRun({
-                                    text: "WOMENS audit list - 第" + currentPage + "页",
-                                    bold: true,
-                                    size: 18,
-                                    font: "微软雅黑"
-                                })
-                            ],
-                            alignment: docx.AlignmentType.CENTER,
-                            spacing: { after: 200 }
-                        })
-                    );
-                }
-                docChildren.push(table);
-            });
+            // 按阅读顺序组织VW系列产品
+            const readingOrderVWProducts = this.organizeForReadingOrder(vwProducts);
+            const vwTable = this.createProductTable(readingOrderVWProducts);
+            docChildren.push(vwTable);
         }
 
         const doc = new docx.Document({
@@ -413,26 +393,6 @@ class InventoryReplenishmentGenerator {
         });
 
         return doc;
-    }
-
-    createProductTablesWithPagination(products, type) {
-        const groupedProducts = this.groupProductsByCode(products);
-        const tables = [];
-        
-        // 每页显示的行数（根据实际调整）
-        const rowsPerPage = 20;
-        const totalPages = Math.ceil(groupedProducts.length / rowsPerPage);
-
-        for (let page = 0; page < totalPages; page++) {
-            const startIdx = page * rowsPerPage;
-            const endIdx = startIdx + rowsPerPage;
-            const pageProducts = groupedProducts.slice(startIdx, endIdx);
-            
-            const table = this.createProductTable(pageProducts);
-            tables.push(table);
-        }
-
-        return tables;
     }
 
     createProductTable(products) {
@@ -557,7 +517,7 @@ class InventoryReplenishmentGenerator {
             const stock = sizeStock[1];
             const separator = index < sizesWithStock.length - 1 ? " " : "";
             
-            // 修正：库存 < 2 时标红
+            // 修正：库存 < 2 时标红（需要补货）
             if (stock < 2) {
                 paragraphChildren.push(
                     new docx.TextRun({
@@ -654,8 +614,8 @@ class InventoryReplenishmentGenerator {
                          '✅ 优化特性：\n' +
                          '• 库存<2的尺码显示为红色（需要补货）\n' +
                          '• 添加页码标注\n' +
-                         '• VW系列从奇数页开始，便于双面打印\n' +
-                         '• 第一页左右，第二页左右...的顺序排列';
+                         '• 按阅读顺序分栏（先左栏后右栏）\n' +
+                         '• 保持单页连续表格布局';
         
         document.getElementById('resultText').innerHTML = resultText.replace(/\n/g, '<br>');
         
