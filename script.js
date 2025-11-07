@@ -237,10 +237,9 @@ class InventoryReplenishmentGenerator {
         const vwProducts = separatedProducts.vwProducts;
         
         const docChildren = [];
-        let currentPage = 1;
         let totalPages = 0;
 
-        // 先计算总页数
+        // 计算总页数
         const vTables = this.createProductTablesWithPagination(vProducts, "V");
         const vwTables = this.createProductTablesWithPagination(vwProducts, "VW");
         totalPages = vTables.length + vwTables.length;
@@ -261,7 +260,7 @@ class InventoryReplenishmentGenerator {
             );
         }
 
-        // 处理V系列产品 - 只在第一页显示标题
+        // 处理V系列产品
         if (vProducts.length > 0) {
             docChildren.push(
                 new docx.Paragraph({
@@ -278,15 +277,18 @@ class InventoryReplenishmentGenerator {
                 })
             );
 
-            // 添加所有V系列表格，不添加分页符
-            vTables.forEach((table) => {
+            // 添加所有V系列表格
+            vTables.forEach((table, index) => {
                 docChildren.push(table);
+                // 在表格之间添加适当间距，但不添加分页符
+                if (index < vTables.length - 1) {
+                    docChildren.push(new docx.Paragraph({ children: [] }));
+                }
             });
         }
 
-        // 处理VW系列产品 - 在VW系列开始前添加分页符和标题
+        // 处理VW系列产品 - 在VW系列开始前添加分页符
         if (vwProducts.length > 0) {
-            // 在VW系列开始前添加分页符
             docChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
             
             docChildren.push(
@@ -304,18 +306,22 @@ class InventoryReplenishmentGenerator {
                 })
             );
 
-            // 添加所有VW系列表格，不添加分页符
-            vwTables.forEach((table) => {
+            // 添加所有VW系列表格
+            vwTables.forEach((table, index) => {
                 docChildren.push(table);
+                // 在表格之间添加适当间距，但不添加分页符
+                if (index < vwTables.length - 1) {
+                    docChildren.push(new docx.Paragraph({ children: [] }));
+                }
             });
         }
 
-        // 在所有内容结束后添加页码
+        // 添加页码
         docChildren.push(
             new docx.Paragraph({
                 children: [
                     new docx.TextRun({
-                        text: "第 " + currentPage + " 页 / 共 " + totalPages + " 页",
+                        text: "第 1 页 / 共 " + totalPages + " 页",
                         size: 14,
                         font: "微软雅黑",
                         color: "666666"
@@ -331,14 +337,14 @@ class InventoryReplenishmentGenerator {
                 properties: {
                     page: {
                         size: {
-                            width: 11906,  // A4竖版宽度
-                            height: 16838   // A4竖版高度
+                            width: 11906,
+                            height: 16838
                         },
                         margin: {
-                            top: 500,      // 减少上边距
-                            right: 500,    // 减少右边距
-                            bottom: 500,   // 减少下边距
-                            left: 500      // 减少左边距
+                            top: 500,
+                            right: 500,
+                            bottom: 500,
+                            left: 500
                         }
                     },
                     pageOrientation: docx.PageOrientation.PORTRAIT
@@ -351,12 +357,14 @@ class InventoryReplenishmentGenerator {
     }
 
     createProductTablesWithPagination(products, type) {
-        const groupedProducts = this.groupProductsByCode(products);
+        // 先对所有产品统一排序
+        const sortedProducts = this.sortProductsByCode(products);
+        const groupedProducts = this.groupProductsByCode(sortedProducts);
         const tables = [];
         
         // 增加每页行数，适应竖版页面
-        const rowsPerPage = 60;  // 增加每页行数
-        const dataRowsPerPage = rowsPerPage - 1;
+        const rowsPerPage = 60;
+        const dataRowsPerPage = rowsPerPage - 1; // 减去表头行
         
         const totalPages = Math.ceil(groupedProducts.length / dataRowsPerPage);
 
@@ -365,33 +373,38 @@ class InventoryReplenishmentGenerator {
             const endIdx = startIdx + dataRowsPerPage;
             const pageProducts = groupedProducts.slice(startIdx, endIdx);
             
-            const table = this.createProductTable(pageProducts);
+            // 只在第一页显示表头
+            const showHeader = page === 0;
+            const table = this.createProductTable(pageProducts, showHeader);
             tables.push(table);
         }
 
         return tables;
     }
 
-    createProductTable(products) {
+    createProductTable(products, showHeader = true) {
         const productsPerColumn = Math.ceil(products.length / 2);
 
         const tableRows = [];
 
-        const headerRow = new docx.TableRow({
-            children: [
-                this.createTableCell("商品条码", true, "10%"),
-                this.createTableCell("颜色", true, "6%"),
-                this.createTableCell("尺码", true, "39%"),
-                this.createTableCell("商品条码", true, "10%"),
-                this.createTableCell("颜色", true, "6%"),
-                this.createTableCell("尺码", true, "39%")
-            ],
-            height: {
-                value: 300,  // 减少表头高度
-                rule: docx.HeightRule.EXACT
-            }
-        });
-        tableRows.push(headerRow);
+        // 只在需要时显示表头
+        if (showHeader) {
+            const headerRow = new docx.TableRow({
+                children: [
+                    this.createTableCell("商品条码", true, "10%"),
+                    this.createTableCell("颜色", true, "6%"),
+                    this.createTableCell("尺码", true, "39%"),
+                    this.createTableCell("商品条码", true, "10%"),
+                    this.createTableCell("颜色", true, "6%"),
+                    this.createTableCell("尺码", true, "39%")
+                ],
+                height: {
+                    value: 300,
+                    rule: docx.HeightRule.EXACT
+                }
+            });
+            tableRows.push(headerRow);
+        }
 
         for (let i = 0; i < productsPerColumn; i++) {
             const leftProduct = products[i];
@@ -408,7 +421,7 @@ class InventoryReplenishmentGenerator {
                     this.createSizesCell(rightProduct, bgColor, "39%")
                 ],
                 height: {
-                    value: 280,  // 减少行高
+                    value: 280,
                     rule: docx.HeightRule.EXACT
                 }
             });
@@ -440,7 +453,7 @@ class InventoryReplenishmentGenerator {
         return new docx.TableCell({
             width: { size: widthValue, type: docx.WidthType.PERCENTAGE },
             margins: { 
-                top: 40,    // 减少单元格内边距
+                top: 40,
                 bottom: 40, 
                 left: 40, 
                 right: 40 
@@ -452,14 +465,14 @@ class InventoryReplenishmentGenerator {
                     children: [
                         new docx.TextRun({
                             text: text,
-                            size: 14,  // 稍微减小字体大小
+                            size: 14,
                             font: "微软雅黑",
                             bold: isHeader
                         })
                     ],
                     alignment: docx.AlignmentType.LEFT,
                     spacing: { 
-                        line: 200,  // 减少行间距
+                        line: 200,
                         before: 0,
                         after: 0
                     }
@@ -502,7 +515,7 @@ class InventoryReplenishmentGenerator {
                         text: sizeText,
                         color: "FF0000",
                         bold: true,
-                        size: 14,  // 稍微减小字体大小
+                        size: 14,
                         font: "微软雅黑"
                     })
                 );
@@ -511,7 +524,7 @@ class InventoryReplenishmentGenerator {
                     new docx.TextRun({
                         text: sizeText,
                         color: "000000",
-                        size: 14,  // 稍微减小字体大小
+                        size: 14,
                         font: "微软雅黑"
                     })
                 );
@@ -544,7 +557,7 @@ class InventoryReplenishmentGenerator {
                     children: paragraphChildren,
                     alignment: docx.AlignmentType.LEFT,
                     spacing: { 
-                        line: 200,  // 减少行间距
+                        line: 200,
                         before: 0,
                         after: 0
                     }
@@ -588,7 +601,7 @@ class InventoryReplenishmentGenerator {
         const vwProducts = separatedProducts.vwProducts;
         
         const totalProducts = data.length;
-        const estimatedPages = Math.ceil(totalProducts / 59) + 1;  // 更新预估页数计算
+        const estimatedPages = Math.ceil(totalProducts / 59) + 1;
         
         const resultText = '处理完成！共找到 ' + data.length + ' 个产品组合\n' +
                          'V系列: ' + vProducts.length + '个\n' +
@@ -597,6 +610,7 @@ class InventoryReplenishmentGenerator {
                          '优化特性：\n' +
                          '• 只显示有库存的尺码\n' +
                          '• 库存<2的尺码显示为红色\n' +
+                         '• 商品条码连续排序，便于查阅\n' +
                          '• single size run版，有问题请微信群内戳戳Nyxie';
         
         document.getElementById('resultText').innerHTML = resultText.replace(/\n/g, '<br>');
