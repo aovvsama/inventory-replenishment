@@ -261,7 +261,7 @@ class InventoryReplenishmentGenerator {
             );
         }
 
-        // 处理V系列产品
+        // 处理V系列产品 - 只在第一页显示标题
         if (vProducts.length > 0) {
             docChildren.push(
                 new docx.Paragraph({
@@ -278,47 +278,13 @@ class InventoryReplenishmentGenerator {
                 })
             );
 
-            vTables.forEach((table, index) => {
-                if (index > 0) {
-                    // 只有从第二页开始才添加分页符和标题
-                    docChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
-                    docChildren.push(
-                        new docx.Paragraph({
-                            children: [
-                                new docx.TextRun({
-                                    text: "MENS audit list",
-                                    bold: true,
-                                    size: 22,
-                                    font: "微软雅黑"
-                                })
-                            ],
-                            alignment: docx.AlignmentType.CENTER,
-                            spacing: { after: 200 }
-                        })
-                    );
-                }
+            // 添加所有V系列表格，不添加分页符
+            vTables.forEach((table) => {
                 docChildren.push(table);
-                
-                // 添加页码
-                docChildren.push(
-                    new docx.Paragraph({
-                        children: [
-                            new docx.TextRun({
-                                text: "第 " + currentPage + " 页 / 共 " + totalPages + " 页",
-                                size: 14,
-                                font: "微软雅黑",
-                                color: "666666"
-                            })
-                        ],
-                        alignment: docx.AlignmentType.RIGHT,
-                        spacing: { after: 200 }
-                    })
-                );
-                currentPage++;
             });
         }
 
-        // 处理VW系列产品
+        // 处理VW系列产品 - 在VW系列开始前添加分页符和标题
         if (vwProducts.length > 0) {
             // 在VW系列开始前添加分页符
             docChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
@@ -338,44 +304,27 @@ class InventoryReplenishmentGenerator {
                 })
             );
 
-            vwTables.forEach((table, index) => {
-                if (index > 0) {
-                    docChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
-                    docChildren.push(
-                        new docx.Paragraph({
-                            children: [
-                                new docx.TextRun({
-                                    text: "WOMENS audit list",
-                                    bold: true,
-                                    size: 22,
-                                    font: "微软雅黑"
-                                })
-                            ],
-                            alignment: docx.AlignmentType.CENTER,
-                            spacing: { after: 200 }
-                        })
-                    );
-                }
+            // 添加所有VW系列表格，不添加分页符
+            vwTables.forEach((table) => {
                 docChildren.push(table);
-                
-                // 添加页码
-                docChildren.push(
-                    new docx.Paragraph({
-                        children: [
-                            new docx.TextRun({
-                                text: "第 " + currentPage + " 页 / 共 " + totalPages + " 页",
-                                size: 14,
-                                font: "微软雅黑",
-                                color: "666666"
-                            })
-                        ],
-                        alignment: docx.AlignmentType.RIGHT,
-                        spacing: { after: 200 }
-                    })
-                );
-                currentPage++;
             });
         }
+
+        // 在所有内容结束后添加页码
+        docChildren.push(
+            new docx.Paragraph({
+                children: [
+                    new docx.TextRun({
+                        text: "第 " + currentPage + " 页 / 共 " + totalPages + " 页",
+                        size: 14,
+                        font: "微软雅黑",
+                        color: "666666"
+                    })
+                ],
+                alignment: docx.AlignmentType.RIGHT,
+                spacing: { after: 200 }
+            })
+        );
 
         const doc = new docx.Document({
             sections: [{
@@ -648,7 +597,6 @@ class InventoryReplenishmentGenerator {
                          '优化特性：\n' +
                          '• 只显示有库存的尺码\n' +
                          '• 库存<2的尺码显示为红色\n' +
-                         '• 竖版页面，完整显示内容\n' +
                          '• single size run版，有问题请微信群内戳戳Nyxie';
         
         document.getElementById('resultText').innerHTML = resultText.replace(/\n/g, '<br>');
