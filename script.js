@@ -8,289 +8,241 @@ class InventoryReplenishmentGenerator {
         this.processedData = null;
         this.originalData = null;
         
-        console.log('🚀 初始化库存补货生成器...');
         this.initializeEventListeners();
     }
 
-    // 事件监听器初始化方法
-    initializeEventListeners = () => {
-        console.log('🔄 初始化事件监听器...');
-        
-        const uploadArea = document.getElementById('uploadArea');
+    initializeEventListeners() {
         const fileInput = document.getElementById('fileInput');
+        const uploadArea = document.getElementById('uploadArea');
 
-        console.log('📋 元素状态:', {
-            uploadArea: uploadArea ? '找到' : '未找到',
-            fileInput: fileInput ? '找到' : '未找到'
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                this.handleFileSelect(e.target.files[0]);
+            }
         });
 
-        if (!uploadArea || !fileInput) {
-            console.error('❌ 错误: 必要的DOM元素未找到');
-            return;
-        }
-
-        // 拖拽事件
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
-            e.stopPropagation();
             uploadArea.classList.add('dragover');
-            console.log('🎯 拖拽经过上传区域');
         });
 
-        uploadArea.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+        uploadArea.addEventListener('dragleave', () => {
             uploadArea.classList.remove('dragover');
-            console.log('🚪 拖拽离开上传区域');
         });
 
         uploadArea.addEventListener('drop', (e) => {
             e.preventDefault();
-            e.stopPropagation();
             uploadArea.classList.remove('dragover');
-            
-            const files = e.dataTransfer.files;
-            console.log('📥 文件放下, 文件数量:', files.length);
-            
-            if (files.length > 0) {
-                this.handleFiles(files);
+            if (e.dataTransfer.files.length > 0) {
+                this.handleFileSelect(e.dataTransfer.files[0]);
             }
         });
-
-        // 文件选择事件
-        fileInput.addEventListener('change', (e) => {
-            console.log('📁 文件选择变化');
-            const files = e.target.files;
-            if (files.length > 0) {
-                console.log('📄 选择的文件:', files[0].name);
-                this.handleFiles(files);
-            }
-        });
-
-        // 下载按钮事件
-        const downloadBtn = document.getElementById('downloadBtn');
-        if (downloadBtn) {
-            downloadBtn.addEventListener('click', () => {
-                this.downloadWordDocument();
-            });
-        }
-
-        console.log('✅ 事件监听器初始化完成');
     }
 
-    // 处理文件的方法
-    handleFiles = async (files) => {
-        const file = files[0];
-        console.log('🔄 开始处理文件:', file.name);
-        
-        if (!this.isExcelFile(file)) {
-            alert('请上传Excel文件 (.xlsx 或 .xls 格式)');
+    async handleFileSelect(file) {
+        if (!file.name.match(/\.(xlsx|xls)$/)) {
+            alert('请选择Excel文件（.xlsx 或 .xls 格式）');
             return;
         }
 
+        this.showProgress();
+        this.updateProgress(10, '正在读取Excel文件...');
+
         try {
-            this.showProgress();
-            
-            // 读取Excel文件
             const data = await this.readExcelFile(file);
             this.originalData = data;
+            this.updateProgress(40, '正在处理数据...');
             
-            // 处理数据
-            this.processedData = this.processData(data);
+            const processedData = this.processData(data);
+            this.updateProgress(70, '正在生成文档...');
             
-            // 显示结果
-            this.showResult();
+            this.processedData = processedData;
+            this.updateProgress(100, '处理完成！');
             
+            this.showResult(processedData);
         } catch (error) {
-            console.error('❌ 处理文件时出错:', error);
-            alert('处理文件时出错: ' + error.message);
-            this.resetApp();
+            this.showError(error.message);
         }
     }
 
-    // 检查是否为Excel文件
-    isExcelFile = (file) => {
-        const allowedTypes = [
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'application/vnd.ms-excel'
-        ];
-        const allowedExtensions = ['.xlsx', '.xls'];
-        
-        return allowedTypes.includes(file.type) || 
-               allowedExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
-    }
-
-    // 显示进度
-    showProgress = () => {
-        const uploadArea = document.getElementById('uploadArea');
-        const progressArea = document.getElementById('progressArea');
-        
-        if (uploadArea) uploadArea.style.display = 'none';
-        if (progressArea) progressArea.style.display = 'block';
-        
-        this.updateProgress('正在读取Excel文件...', 30);
-    }
-
-    // 更新进度
-    updateProgress = (text, percent) => {
-        const progressText = document.getElementById('progressText');
-        const progressFill = document.getElementById('progressFill');
-        
-        if (progressText) progressText.textContent = text;
-        if (progressFill) progressFill.style.width = percent + '%';
-    }
-
-    // 显示结果
-    showResult = () => {
-        const progressArea = document.getElementById('progressArea');
-        const resultArea = document.getElementById('resultArea');
-        const resultText = document.getElementById('resultText');
-        
-        if (progressArea) progressArea.style.display = 'none';
-        if (resultArea) resultArea.style.display = 'block';
-        
-        if (resultText && this.processedData) {
-            const vProducts = this.processedData.filter(item => 
-                item.code && item.code.startsWith('V') && !item.code.startsWith('VW')
-            );
-            const vwProducts = this.processedData.filter(item => 
-                item.code && item.code.startsWith('VW')
-            );
-            
-            resultText.innerHTML = `
-                成功处理 ${this.processedData.length} 个产品组合<br>
-                V系列: ${vProducts.length} 个<br>
-                VW系列: ${vwProducts.length} 个<br>
-                <small>点击下方按钮下载Word文档</small>
-            `;
-        }
-    }
-
-    // 重置应用
-    resetApp = () => {
-        const uploadArea = document.getElementById('uploadArea');
-        const progressArea = document.getElementById('progressArea');
-        const resultArea = document.getElementById('resultArea');
-        const fileInput = document.getElementById('fileInput');
-        
-        if (uploadArea) uploadArea.style.display = 'block';
-        if (progressArea) progressArea.style.display = 'none';
-        if (resultArea) resultArea.style.display = 'none';
-        if (fileInput) fileInput.value = '';
-        
-        this.processedData = null;
-        this.originalData = null;
-    }
-
-    // 读取Excel文件
-    readExcelFile = (file) => {
+    readExcelFile(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             
-            reader.onload = (e) => {
+            reader.onload = function(e) {
                 try {
-                    this.updateProgress('解析Excel数据...', 60);
-                    
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
                     const firstSheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[firstSheetName];
-                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                    
-                    console.log('✅ Excel文件读取成功，行数:', jsonData.length);
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet);
                     resolve(jsonData);
                 } catch (error) {
-                    console.error('❌ 解析Excel文件失败:', error);
-                    reject(new Error('解析Excel文件失败: ' + error.message));
+                    reject(new Error('读取Excel文件失败：' + error.message));
                 }
             };
             
-            reader.onerror = () => {
-                console.error('❌ 读取文件失败');
+            reader.onerror = function() {
                 reject(new Error('读取文件失败'));
             };
-            
             reader.readAsArrayBuffer(file);
         });
     }
 
-    // 处理数据
-    processData = (data) => {
-        console.log('🔄 开始处理数据...');
-        this.updateProgress('处理库存数据...', 80);
+    processData(data) {
+        if (!data || data.length === 0) {
+            throw new Error('Excel文件中没有数据');
+        }
+
+        console.log('原始数据:', data);
+        console.log('所有列名:', Object.keys(data[0]));
+
+        const cleanedData = data.filter(row => {
+            const hasColor = row['Color'] && row['Color'].toString().trim() !== '';
+            const hasSize = row['Size'] && row['Size'].toString().trim() !== '';
+            const hasStock = parseFloat(row['总库存']) > 0;
+            
+            return hasColor && hasSize && hasStock;
+        });
+
+        console.log('清理后数据:', cleanedData);
+
+        if (cleanedData.length === 0) {
+            throw new Error('清理后没有有效数据，请检查Excel文件内容');
+        }
+
+        const columnMap = {
+            productCode: '商品条码',
+            color: 'Color', 
+            size: 'Size',
+            stock: '总库存'
+        };
+
+        const availableColumns = Object.keys(cleanedData[0]);
+        const missingColumns = [];
         
-        if (!data || data.length < 2) {
-            throw new Error('Excel数据为空或格式不正确');
+        for (const [key, columnName] of Object.entries(columnMap)) {
+            if (!availableColumns.includes(columnName)) {
+                missingColumns.push(columnName);
+            }
         }
 
-        // 获取表头
-        const headers = data[0];
-        const codeIndex = headers.findIndex(h => h === '商品条码' || h === '条码');
-        const colorIndex = headers.findIndex(h => h === 'Color' || h === '颜色');
-        const sizeIndex = headers.findIndex(h => h === 'Size' || h === '尺码');
-        const stockIndex = headers.findIndex(h => h === '总库存' || h === '库存');
-
-        if (codeIndex === -1) {
-            throw new Error('Excel文件中找不到"商品条码"列');
+        if (missingColumns.length > 0) {
+            throw new Error('缺少必需的列：' + missingColumns.join(', ') + '\n\n检测到的列名：' + availableColumns.join(', '));
         }
 
-        // 处理数据行
-        const processed = [];
-        for (let i = 1; i < data.length; i++) {
-            const row = data[i];
-            if (row && row[codeIndex]) {
-                processed.push({
-                    code: String(row[codeIndex]).trim(),
-                    color: colorIndex !== -1 && row[colorIndex] ? String(row[colorIndex]).trim() : '',
-                    size: sizeIndex !== -1 && row[sizeIndex] ? String(row[sizeIndex]).trim() : '',
-                    stock: stockIndex !== -1 && row[stockIndex] ? Number(row[stockIndex]) || 0 : 0
+        console.log('列映射验证通过:', columnMap);
+        console.log('清理后有效数据:', cleanedData.length, '行');
+
+        const grouped = {};
+        cleanedData.forEach(row => {
+            const productCode = row[columnMap.productCode].toString().trim();
+            const color = row[columnMap.color].toString().trim();
+            const size = row[columnMap.size].toString().trim();
+            const stock = parseFloat(row[columnMap.stock]) || 0;
+            
+            const key = productCode + '_' + color;
+            if (!grouped[key]) {
+                grouped[key] = {
+                    productCode: productCode,
+                    color: color,
+                    sizes: new Map()
+                };
+            }
+            grouped[key].sizes.set(size, stock);
+        });
+
+        const processedData = Object.values(grouped).map(item => ({
+            productCode: item.productCode,
+            color: item.color,
+            sizes: this.sortSizesWithStock(Array.from(item.sizes.entries()))
+        }));
+
+        console.log('处理后产品数量:', processedData.length);
+        console.log('处理后的数据:', processedData);
+
+        if (processedData.length === 0) {
+            throw new Error('没有找到有效的产品数据');
+        }
+
+        return processedData;
+    }
+
+    sortSizesWithStock(sizeStockPairs) {
+        const getSizeKey = (size) => {
+            const sizeStr = size.toUpperCase().trim();
+            
+            if (this.sizeOrder.hasOwnProperty(sizeStr)) {
+                return this.sizeOrder[sizeStr];
+            }
+            
+            if (!isNaN(sizeStr) && sizeStr !== '') {
+                return parseInt(sizeStr) + 100;
+            }
+            
+            return 999;
+        };
+
+        return sizeStockPairs.sort((a, b) => getSizeKey(a[0]) - getSizeKey(b[0]));
+    }
+
+    sortProductsByCode(products) {
+        return products.sort((a, b) => {
+            const codeA = a.productCode.toString();
+            const codeB = b.productCode.toString();
+            return codeA.localeCompare(codeB);
+        });
+    }
+
+    separateVandVWProducts(data) {
+        const vProducts = [];
+        const vwProducts = [];
+
+        data.forEach(item => {
+            const productCode = item.productCode.toString();
+            if (productCode.startsWith('VW')) {
+                vwProducts.push(item);
+            } else {
+                vProducts.push(item);
+            }
+        });
+
+        return {
+            vProducts: this.sortProductsByCode(vProducts),
+            vwProducts: this.sortProductsByCode(vwProducts)
+        };
+    }
+
+    groupProductsByCode(products) {
+        const grouped = {};
+        products.forEach(product => {
+            if (!grouped[product.productCode]) {
+                grouped[product.productCode] = [];
+            }
+            grouped[product.productCode].push(product);
+        });
+
+        const result = [];
+        Object.keys(grouped).forEach(code => {
+            const items = grouped[code];
+            
+            result.push({
+                ...items[0],
+                showCode: true
+            });
+            
+            for (let i = 1; i < items.length; i++) {
+                result.push({
+                    ...items[i],
+                    showCode: false
                 });
             }
-        }
+        });
 
-        console.log('✅ 数据处理完成，产品数量:', processed.length);
-        return processed;
+        return result;
     }
 
-    // 下载Word文档
-    downloadWordDocument = async () => {
-        try {
-            this.updateProgress('生成Word文档...', 90);
-            
-            if (!this.processedData || this.processedData.length === 0) {
-                throw new Error('没有可处理的数据');
-            }
-
-            const doc = await this.generateWordDocument();
-            const blob = await docx.Packer.toBlob(doc);
-            
-            // 下载文件
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `库存补货清单_${new Date().toISOString().split('T')[0]}.docx`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            console.log('✅ Word文档下载完成');
-            
-        } catch (error) {
-            console.error('❌ 生成Word文档时出错:', error);
-            alert('生成Word文档时出错: ' + error.message);
-        }
-    }
-
-    // Word文档生成核心方法
-    generateWordDocument = async () => {
-        if (!this.processedData || this.processedData.length === 0) {
-            throw new Error('没有数据可生成文档');
-        }
-
-        console.log('📝 开始生成Word文档...');
-
-        // 分离V和VW系列产品
+    async generateWordDocument() {
         const separatedProducts = this.separateVandVWProducts(this.processedData);
         const vProducts = separatedProducts.vProducts;
         const vwProducts = separatedProducts.vwProducts;
@@ -333,7 +285,7 @@ class InventoryReplenishmentGenerator {
             new docx.Paragraph({
                 children: [
                     new docx.TextRun({
-                        text: `统计信息：共 ${this.processedData.length} 个产品组合（V系列: ${vProducts.length}个, VW系列: ${vwProducts.length}个）`,
+                        text: "统计信息：共 " + this.processedData.length + " 个产品组合（V系列: " + vProducts.length + "个, VW系列: " + vwProducts.length + "个）",
                         size: 16,
                         font: "微软雅黑",
                         bold: true
@@ -432,7 +384,7 @@ class InventoryReplenishmentGenerator {
                 properties: {
                     page: {
                         size: {
-                            width: 11906, // A4横向
+                            width: 11906,
                             height: 16838
                         },
                         margin: {
@@ -448,32 +400,11 @@ class InventoryReplenishmentGenerator {
             }]
         });
 
-        console.log('✅ Word文档结构创建完成');
         return doc;
     }
 
-    // 分离V和VW系列产品
-    separateVandVWProducts = (products) => {
-        const vProducts = [];
-        const vwProducts = [];
-        
-        products.forEach(product => {
-            if (product.code && product.code.startsWith('VW')) {
-                vwProducts.push(product);
-            } else if (product.code && product.code.startsWith('V')) {
-                vProducts.push(product);
-            }
-        });
-        
-        // 按商品条码排序
-        vProducts.sort((a, b) => (a.code || '').localeCompare(b.code || ''));
-        vwProducts.sort((a, b) => (a.code || '').localeCompare(b.code || ''));
-        
-        return { vProducts, vwProducts };
-    }
-
-    // 创建连续分页的表格
-    createProductTablesWithContinuousPagination = (products, type) => {
+    // 新增：创建连续分页的表格
+    createProductTablesWithContinuousPagination(products, type) {
         const groupedProducts = this.groupProductsByCode(products);
         const tables = [];
         
@@ -493,47 +424,11 @@ class InventoryReplenishmentGenerator {
         return tables;
     }
 
-    // 按商品条码分组
-    groupProductsByCode = (products) => {
-        const groups = {};
-        
-        products.forEach(product => {
-            if (!product.code) return;
-            
-            if (!groups[product.code]) {
-                groups[product.code] = {
-                    code: product.code,
-                    color: product.color,
-                    sizes: []
-                };
-            }
-            
-            // 添加尺码信息，库存<2的标记为需要补货
-            groups[product.code].sizes.push({
-                size: product.size,
-                stock: product.stock,
-                needReplenish: (product.stock || 0) < 2
-            });
-        });
-        
-        // 对每个商品的尺码进行排序
-        Object.values(groups).forEach(group => {
-            group.sizes.sort((a, b) => {
-                const orderA = this.sizeOrder[a.size] || 999;
-                const orderB = this.sizeOrder[b.size] || 999;
-                return orderA - orderB;
-            });
-        });
-        
-        return Object.values(groups);
-    }
-
-    // 创建产品表格
-    createProductTable = (products) => {
+    createProductTable(products) {
         const productsPerColumn = Math.ceil(products.length / 2);
+
         const tableRows = [];
 
-        // 表头行
         const headerRow = new docx.TableRow({
             children: [
                 this.createTableCell("商品条码", true, "15%"),
@@ -550,7 +445,6 @@ class InventoryReplenishmentGenerator {
         });
         tableRows.push(headerRow);
 
-        // 数据行
         for (let i = 0; i < productsPerColumn; i++) {
             const leftProduct = products[i];
             const rightProduct = products[i + productsPerColumn];
@@ -593,157 +487,193 @@ class InventoryReplenishmentGenerator {
         return table;
     }
 
-    // 创建表格单元格的辅助方法
-    createTableCell = (text, isHeader = false, width = "auto") => {
+    createTableCell(text, isHeader, width) {
+        const widthValue = parseInt(width);
         return new docx.TableCell({
+            width: { size: widthValue, type: docx.WidthType.PERCENTAGE },
+            margins: { 
+                top: 50,
+                bottom: 50, 
+                left: 50, 
+                right: 50 
+            },
+            shading: isHeader ? { fill: "E8E8E8" } : undefined,
+            verticalAlign: docx.VerticalAlign.CENTER,
             children: [
                 new docx.Paragraph({
                     children: [
                         new docx.TextRun({
                             text: text,
-                            bold: isHeader,
-                            size: isHeader ? 20 : 18,
-                            font: "微软雅黑"
-                        })
-                    ],
-                    alignment: docx.AlignmentType.CENTER
-                })
-            ],
-            shading: isHeader ? {
-                fill: "E8E8E8"
-            } : undefined,
-            width: {
-                size: width === "auto" ? 0 : parseInt(width),
-                type: width === "auto" ? docx.WidthType.AUTO : docx.WidthType.PERCENTAGE
-            },
-            verticalAlign: docx.VerticalAlign.CENTER
-        });
-    }
-
-    createProductCell = (product, bgColor, width) => {
-        if (!product) {
-            return new docx.TableCell({
-                children: [new docx.Paragraph({})],
-                shading: { fill: bgColor },
-                width: { size: parseInt(width), type: docx.WidthType.PERCENTAGE }
-            });
-        }
-
-        return new docx.TableCell({
-            children: [
-                new docx.Paragraph({
-                    children: [
-                        new docx.TextRun({
-                            text: product.code || "",
-                            size: 18,
+                            size: 14,
                             font: "微软雅黑",
-                            bold: true
+                            bold: isHeader
                         })
                     ],
-                    alignment: docx.AlignmentType.CENTER
+                    alignment: docx.AlignmentType.LEFT,
+                    spacing: { 
+                        line: 200,
+                        before: 0,
+                        after: 0
+                    }
                 })
-            ],
-            shading: { fill: bgColor },
-            width: { size: parseInt(width), type: docx.WidthType.PERCENTAGE },
-            verticalAlign: docx.VerticalAlign.CENTER
+            ]
         });
     }
 
-    createColorCell = (product, bgColor, width) => {
-        if (!product) {
-            return new docx.TableCell({
-                children: [new docx.Paragraph({})],
-                shading: { fill: bgColor },
-                width: { size: parseInt(width), type: docx.WidthType.PERCENTAGE }
-            });
-        }
-
-        return new docx.TableCell({
-            children: [
-                new docx.Paragraph({
-                    children: [
-                        new docx.TextRun({
-                            text: product.color || "",
-                            size: 18,
-                            font: "微软雅黑"
-                        })
-                    ],
-                    alignment: docx.AlignmentType.CENTER
-                })
-            ],
-            shading: { fill: bgColor },
-            width: { size: parseInt(width), type: docx.WidthType.PERCENTAGE },
-            verticalAlign: docx.VerticalAlign.CENTER
-        });
+    createProductCell(product, bgColor, width) {
+        const text = product ? (product.showCode ? product.productCode : "") : "";
+        const cell = this.createTableCell(text, false, width);
+        cell.shading = { fill: bgColor };
+        return cell;
     }
 
-    createSizesCell = (product, bgColor, width) => {
+    createColorCell(product, bgColor, width) {
+        const text = product ? product.color : "";
+        const cell = this.createTableCell(text, false, width);
+        cell.shading = { fill: bgColor };
+        return cell;
+    }
+
+    createSizesCell(product, bgColor, width) {
         if (!product) {
-            return new docx.TableCell({
-                children: [new docx.Paragraph({})],
-                shading: { fill: bgColor },
-                width: { size: parseInt(width), type: docx.WidthType.PERCENTAGE }
-            });
+            return this.createTableCell("", false, width);
         }
 
-        const sizeTexts = [];
-        product.sizes.forEach((sizeInfo, index) => {
-            if (index > 0) sizeTexts.push(" ");
+        const paragraphChildren = [];
+        const sizesWithStock = product.sizes;
+        
+        sizesWithStock.forEach((sizeStock, index) => {
+            const size = sizeStock[0];
+            const stock = sizeStock[1];
+            const sizeText = `${size}(${stock})`;
+            const separator = index < sizesWithStock.length - 1 ? " " : "";
             
-            const sizeText = `${sizeInfo.size}(${sizeInfo.stock})`;
-            
-            if (sizeInfo.needReplenish) {
-                // 库存<2的显示为红色
-                sizeTexts.push(
+            // 修复：库存<2的显示为红色
+            if (stock < 2) {
+                paragraphChildren.push(
                     new docx.TextRun({
                         text: sizeText,
                         color: "FF0000", // 红色
                         bold: true,
-                        size: 18,
+                        size: 14,
                         font: "微软雅黑"
                     })
                 );
             } else {
-                sizeTexts.push(
+                paragraphChildren.push(
                     new docx.TextRun({
                         text: sizeText,
-                        size: 18,
+                        color: "000000",
+                        size: 14,
+                        font: "微软雅黑"
+                    })
+                );
+            }
+            
+            if (separator) {
+                paragraphChildren.push(
+                    new docx.TextRun({
+                        text: separator,
+                        color: "000000",
+                        size: 14,
                         font: "微软雅黑"
                     })
                 );
             }
         });
 
-        return new docx.TableCell({
+        const cell = new docx.TableCell({
+            width: { size: parseInt(width), type: docx.WidthType.PERCENTAGE },
+            margins: { 
+                top: 50,
+                bottom: 50, 
+                left: 50, 
+                right: 50 
+            },
+            shading: { fill: bgColor },
+            verticalAlign: docx.VerticalAlign.CENTER,
             children: [
                 new docx.Paragraph({
-                    children: sizeTexts,
-                    alignment: docx.AlignmentType.LEFT
+                    children: paragraphChildren,
+                    alignment: docx.AlignmentType.LEFT,
+                    spacing: { 
+                        line: 200,
+                        before: 0,
+                        after: 0
+                    }
                 })
-            ],
-            shading: { fill: bgColor },
-            width: { size: parseInt(width), type: docx.WidthType.PERCENTAGE },
-            verticalAlign: docx.VerticalAlign.CENTER
+            ]
         });
+
+        return cell;
+    }
+
+    async downloadWordDocument() {
+        try {
+            this.updateProgress(80, '正在生成Word文档...');
+            
+            const doc = await this.generateWordDocument();
+            
+            const blob = await docx.Packer.toBlob(doc);
+            const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            saveAs(blob, '补货清单_' + timestamp + '.docx');
+            
+        } catch (error) {
+            console.error('生成Word文档失败:', error);
+            alert('生成Word文档失败: ' + error.message);
+        }
+    }
+
+    showProgress() {
+        document.getElementById('uploadArea').style.display = 'none';
+        document.getElementById('progressArea').style.display = 'block';
+        document.getElementById('resultArea').style.display = 'none';
+    }
+
+    updateProgress(percent, text) {
+        document.getElementById('progressFill').style.width = percent + '%';
+        document.getElementById('progressText').textContent = text;
+    }
+
+    showResult(data) {
+        const separatedProducts = this.separateVandVWProducts(data);
+        const vProducts = separatedProducts.vProducts;
+        const vwProducts = separatedProducts.vwProducts;
+        
+        const resultText = '处理完成！共找到 ' + data.length + ' 个产品组合\n' +
+                         'V系列: ' + vProducts.length + '个\n' +
+                         'VW系列: ' + vwProducts.length + '个\n\n' +
+                         '✅ 优化特性：\n' +
+                         '• 压缩商品条码和颜色列宽度\n' +
+                         '• 增加尺码列显示空间\n' +
+                         '• 删除↑符号，同款后续行留空\n' +
+                         '• 库存<2的尺码显示为红色\n' +
+                         '• 连续分页布局，每页左右两栏各20个产品\n' +
+                         '• 均衡左右两栏宽度';
+        
+        document.getElementById('resultText').innerHTML = resultText.replace(/\n/g, '<br>');
+        
+        document.getElementById('progressArea').style.display = 'none';
+        document.getElementById('resultArea').style.display = 'block';
+        
+        document.getElementById('downloadBtn').onclick = () => this.downloadWordDocument();
+    }
+
+    showError(message) {
+        document.getElementById('progressArea').style.display = 'none';
+        document.getElementById('uploadArea').style.display = 'block';
+        alert('错误：' + message);
     }
 }
 
-// 全局函数
 function resetApp() {
-    if (window.generator) {
-        window.generator.resetApp();
-    }
+    document.getElementById('fileInput').value = '';
+    document.getElementById('uploadArea').style.display = 'block';
+    document.getElementById('progressArea').style.display = 'none';
+    document.getElementById('resultArea').style.display = 'none';
 }
 
-// 页面加载完成后初始化
-console.log('📄 页面加载状态:', document.readyState);
-
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        console.log('✅ DOM内容加载完成，初始化应用...');
-        window.generator = new InventoryReplenishmentGenerator();
-    });
-} else {
-    console.log('✅ DOM已就绪，立即初始化应用...');
-    window.generator = new InventoryReplenishmentGenerator();
-}
+let app;
+document.addEventListener('DOMContentLoaded', function() {
+    app = new InventoryReplenishmentGenerator();
+});
