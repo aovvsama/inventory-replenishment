@@ -263,8 +263,6 @@ class InventoryReplenishmentGenerator {
 
         // 处理V系列产品
         if (vProducts.length > 0) {
-            // 移除分页符，让第一页直接显示内容
-            
             docChildren.push(
                 new docx.Paragraph({
                     children: [
@@ -282,7 +280,7 @@ class InventoryReplenishmentGenerator {
 
             vTables.forEach((table, index) => {
                 if (index > 0) {
-                    // 只有从第二页开始才添加分页符
+                    // 只有从第二页开始才添加分页符和标题
                     docChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
                     docChildren.push(
                         new docx.Paragraph({
@@ -388,13 +386,13 @@ class InventoryReplenishmentGenerator {
                             height: 16838   // A4竖版高度
                         },
                         margin: {
-                            top: 800,
-                            right: 800,
-                            bottom: 800,
-                            left: 800
+                            top: 500,      // 减少上边距
+                            right: 500,    // 减少右边距
+                            bottom: 500,   // 减少下边距
+                            left: 500      // 减少左边距
                         }
                     },
-                    pageOrientation: docx.PageOrientation.PORTRAIT  // 改为竖版
+                    pageOrientation: docx.PageOrientation.PORTRAIT
                 },
                 children: docChildren
             }]
@@ -407,8 +405,8 @@ class InventoryReplenishmentGenerator {
         const groupedProducts = this.groupProductsByCode(products);
         const tables = [];
         
-        // 保持原来的每页行数（38行）
-        const rowsPerPage = 38;
+        // 增加每页行数，适应竖版页面
+        const rowsPerPage = 60;  // 增加每页行数
         const dataRowsPerPage = rowsPerPage - 1;
         
         const totalPages = Math.ceil(groupedProducts.length / dataRowsPerPage);
@@ -440,7 +438,7 @@ class InventoryReplenishmentGenerator {
                 this.createTableCell("尺码", true, "39%")
             ],
             height: {
-                value: 400,  // 保持原来的表头高度
+                value: 300,  // 减少表头高度
                 rule: docx.HeightRule.EXACT
             }
         });
@@ -461,7 +459,7 @@ class InventoryReplenishmentGenerator {
                     this.createSizesCell(rightProduct, bgColor, "39%")
                 ],
                 height: {
-                    value: 380,  // 保持原来的行高
+                    value: 280,  // 减少行高
                     rule: docx.HeightRule.EXACT
                 }
             });
@@ -493,10 +491,10 @@ class InventoryReplenishmentGenerator {
         return new docx.TableCell({
             width: { size: widthValue, type: docx.WidthType.PERCENTAGE },
             margins: { 
-                top: 60,
-                bottom: 60, 
-                left: 60, 
-                right: 60 
+                top: 40,    // 减少单元格内边距
+                bottom: 40, 
+                left: 40, 
+                right: 40 
             },
             shading: isHeader ? { fill: "E8E8E8" } : undefined,
             verticalAlign: docx.VerticalAlign.CENTER,
@@ -505,14 +503,14 @@ class InventoryReplenishmentGenerator {
                     children: [
                         new docx.TextRun({
                             text: text,
-                            size: 16,  // 保持原来的字体大小
+                            size: 14,  // 稍微减小字体大小
                             font: "微软雅黑",
                             bold: isHeader
                         })
                     ],
                     alignment: docx.AlignmentType.LEFT,
                     spacing: { 
-                        line: 240,
+                        line: 200,  // 减少行间距
                         before: 0,
                         after: 0
                     }
@@ -555,7 +553,7 @@ class InventoryReplenishmentGenerator {
                         text: sizeText,
                         color: "FF0000",
                         bold: true,
-                        size: 16,  // 保持原来的字体大小
+                        size: 14,  // 稍微减小字体大小
                         font: "微软雅黑"
                     })
                 );
@@ -564,7 +562,7 @@ class InventoryReplenishmentGenerator {
                     new docx.TextRun({
                         text: sizeText,
                         color: "000000",
-                        size: 16,  // 保持原来的字体大小
+                        size: 14,  // 稍微减小字体大小
                         font: "微软雅黑"
                     })
                 );
@@ -575,7 +573,7 @@ class InventoryReplenishmentGenerator {
                     new docx.TextRun({
                         text: separator,
                         color: "000000",
-                        size: 16,
+                        size: 14,
                         font: "微软雅黑"
                     })
                 );
@@ -585,10 +583,10 @@ class InventoryReplenishmentGenerator {
         const cell = new docx.TableCell({
             width: { size: parseInt(width), type: docx.WidthType.PERCENTAGE },
             margins: { 
-                top: 60,
-                bottom: 60, 
-                left: 60, 
-                right: 60 
+                top: 40,
+                bottom: 40, 
+                left: 40, 
+                right: 40 
             },
             shading: { fill: bgColor },
             verticalAlign: docx.VerticalAlign.CENTER,
@@ -597,7 +595,7 @@ class InventoryReplenishmentGenerator {
                     children: paragraphChildren,
                     alignment: docx.AlignmentType.LEFT,
                     spacing: { 
-                        line: 240,
+                        line: 200,  // 减少行间距
                         before: 0,
                         after: 0
                     }
@@ -641,7 +639,7 @@ class InventoryReplenishmentGenerator {
         const vwProducts = separatedProducts.vwProducts;
         
         const totalProducts = data.length;
-        const estimatedPages = Math.ceil(totalProducts / 37) + 1;
+        const estimatedPages = Math.ceil(totalProducts / 59) + 1;  // 更新预估页数计算
         
         const resultText = '处理完成！共找到 ' + data.length + ' 个产品组合\n' +
                          'V系列: ' + vProducts.length + '个\n' +
@@ -650,6 +648,7 @@ class InventoryReplenishmentGenerator {
                          '优化特性：\n' +
                          '• 只显示有库存的尺码\n' +
                          '• 库存<2的尺码显示为红色\n' +
+                         '• 竖版页面，完整显示内容\n' +
                          '• single size run版，有问题请微信群内戳戳Nyxie';
         
         document.getElementById('resultText').innerHTML = resultText.replace(/\n/g, '<br>');
