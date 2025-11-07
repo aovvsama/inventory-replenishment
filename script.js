@@ -238,7 +238,7 @@ class InventoryReplenishmentGenerator {
         const vwProducts = separatedProducts.vwProducts;
         
         const docChildren = [];
-        const rowsPerPage = 45; // 每页45行内容
+        const rowsPerPage = 44; // 每页44行内容
 
         // 处理V系列产品
         if (vProducts.length > 0) {
