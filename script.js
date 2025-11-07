@@ -237,7 +237,6 @@ class InventoryReplenishmentGenerator {
         const vwProducts = separatedProducts.vwProducts;
         
         const docChildren = [];
-        let totalPages = 0;
 
         // 处理V系列产品
         if (vProducts.length > 0) {
@@ -256,16 +255,9 @@ class InventoryReplenishmentGenerator {
                 })
             );
 
-            // 创建V系列的所有表格（连续排列，自然分页）
-            const vTables = this.createContinuousProductTables(vProducts, "V");
-            vTables.forEach((table, index) => {
-                docChildren.push(table);
-                if (index < vTables.length - 1) {
-                    // 在表格之间添加适当间距
-                    docChildren.push(new docx.Paragraph({ children: [] }));
-                }
-            });
-            totalPages += vTables.length;
+            // 创建单个连续的V系列表格
+            const vTable = this.createSingleProductTable(vProducts, true);
+            docChildren.push(vTable);
         }
 
         // 处理VW系列产品 - 在VW系列开始前添加分页符
@@ -287,33 +279,10 @@ class InventoryReplenishmentGenerator {
                 })
             );
 
-            // 创建VW系列的所有表格（连续排列，自然分页）
-            const vwTables = this.createContinuousProductTables(vwProducts, "VW");
-            vwTables.forEach((table, index) => {
-                docChildren.push(table);
-                if (index < vwTables.length - 1) {
-                    // 在表格之间添加适当间距
-                    docChildren.push(new docx.Paragraph({ children: [] }));
-                }
-            });
-            totalPages += vwTables.length;
+            // 创建单个连续的VW系列表格
+            const vwTable = this.createSingleProductTable(vwProducts, true);
+            docChildren.push(vwTable);
         }
-
-        // 添加页码
-        docChildren.push(
-            new docx.Paragraph({
-                children: [
-                    new docx.TextRun({
-                        text: "第 1 页 / 共 " + totalPages + " 页",
-                        size: 14,
-                        font: "微软雅黑",
-                        color: "666666"
-                    })
-                ],
-                alignment: docx.AlignmentType.RIGHT,
-                spacing: { after: 200 }
-            })
-        );
 
         const doc = new docx.Document({
             sections: [{
@@ -339,51 +308,12 @@ class InventoryReplenishmentGenerator {
         return doc;
     }
 
-    createContinuousProductTables(products, type) {
+    createSingleProductTable(products, showHeader = true) {
         // 先对所有产品统一排序和分组
         const sortedProducts = this.sortProductsByCode(products);
         const groupedProducts = this.groupProductsByCode(sortedProducts);
-        const tables = [];
         
-        // 每页最大行数（包括表头）
-        const maxRowsPerPage = 60;
-        const dataRowsPerPage = maxRowsPerPage - 1; // 减去表头行
-        
-        let currentPageProducts = [];
-        let currentRowCount = 0;
-
-        for (let i = 0; i < groupedProducts.length; i++) {
-            const product = groupedProducts[i];
-            
-            // 如果添加这个产品会超出页面容量，就创建新表格
-            if (currentRowCount + 1 > dataRowsPerPage && currentPageProducts.length > 0) {
-                // 创建当前页的表格（只在第一页显示表头）
-                const showHeader = tables.length === 0;
-                const table = this.createProductTable(currentPageProducts, showHeader);
-                tables.push(table);
-                
-                // 重置当前页数据
-                currentPageProducts = [];
-                currentRowCount = 0;
-            }
-            
-            // 添加产品到当前页
-            currentPageProducts.push(product);
-            currentRowCount++;
-        }
-
-        // 添加最后一页的表格
-        if (currentPageProducts.length > 0) {
-            const showHeader = tables.length === 0;
-            const table = this.createProductTable(currentPageProducts, showHeader);
-            tables.push(table);
-        }
-
-        return tables;
-    }
-
-    createProductTable(products, showHeader = true) {
-        const productsPerColumn = Math.ceil(products.length / 2);
+        const productsPerColumn = Math.ceil(groupedProducts.length / 2);
 
         const tableRows = [];
 
@@ -407,8 +337,8 @@ class InventoryReplenishmentGenerator {
         }
 
         for (let i = 0; i < productsPerColumn; i++) {
-            const leftProduct = products[i];
-            const rightProduct = products[i + productsPerColumn];
+            const leftProduct = groupedProducts[i];
+            const rightProduct = groupedProducts[i + productsPerColumn];
             const bgColor = i % 2 === 0 ? "F8F8F8" : "FFFFFF";
 
             const row = new docx.TableRow({
@@ -601,17 +531,13 @@ class InventoryReplenishmentGenerator {
         const vwProducts = separatedProducts.vwProducts;
         
         const totalProducts = data.length;
-        const estimatedPages = Math.ceil(totalProducts / 59) + 1;
         
         const resultText = '处理完成！共找到 ' + data.length + ' 个产品组合\n' +
                          'V系列: ' + vProducts.length + '个\n' +
-                         'VW系列: ' + vwProducts.length + '个\n' +
-                         '预估页数: ' + estimatedPages + '页\n\n' +
+                         'VW系列: ' + vwProducts.length + '个\n\n' +
                          '优化特性：\n' +
                          '• 只显示有库存的尺码\n' +
                          '• 库存<2的尺码显示为红色\n' +
-                         '• 商品条码连续排序，便于查阅\n' +
-                         '• 自然分页，保持商品完整性\n' +
                          '• single size run版，有问题请微信群内戳戳Nyxie';
         
         document.getElementById('resultText').innerHTML = resultText.replace(/\n/g, '<br>');
