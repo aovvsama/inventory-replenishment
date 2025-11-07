@@ -403,7 +403,7 @@ class InventoryReplenishmentGenerator {
         return doc;
     }
 
-    // 新增：创建连续分页的表格
+    // 创建连续分页的表格
     createProductTablesWithContinuousPagination(products, type) {
         const groupedProducts = this.groupProductsByCode(products);
         const tables = [];
@@ -548,8 +548,10 @@ class InventoryReplenishmentGenerator {
             const sizeText = `${size}(${stock})`;
             const separator = index < sizesWithStock.length - 1 ? " " : "";
             
-            // 修复：库存<2的显示为红色
+            // ✅ 修复后的逻辑：只显示有库存的尺码，库存<2的显示红色
+            // 因为processData已经过滤了库存>0的数据，所以这里stock肯定>0
             if (stock < 2) {
+                // 库存<2：显示为红色（需要补货）
                 paragraphChildren.push(
                     new docx.TextRun({
                         text: sizeText,
@@ -560,6 +562,7 @@ class InventoryReplenishmentGenerator {
                     })
                 );
             } else {
+                // 库存≥2：显示为黑色（库存充足）
                 paragraphChildren.push(
                     new docx.TextRun({
                         text: sizeText,
@@ -644,10 +647,11 @@ class InventoryReplenishmentGenerator {
                          'V系列: ' + vProducts.length + '个\n' +
                          'VW系列: ' + vwProducts.length + '个\n\n' +
                          '✅ 优化特性：\n' +
+                         '• 只显示有库存的尺码\n' +
+                         '• 库存<2的尺码显示为红色（需要补货）\n' +
                          '• 压缩商品条码和颜色列宽度\n' +
                          '• 增加尺码列显示空间\n' +
                          '• 删除↑符号，同款后续行留空\n' +
-                         '• 库存<2的尺码显示为红色\n' +
                          '• 连续分页布局，每页左右两栏各20个产品\n' +
                          '• 均衡左右两栏宽度';
         
