@@ -1,9 +1,9 @@
 class InventoryReplenishmentGenerator {
     constructor() {
         this.sizeOrder = {
-            'XS': 1, 'S': 2, 'M': 3, 'L': 4, 'XL': 5, 'XXL': 6,
-            '28': 7, '29': 8, '30': 9, '31': 10, '32': 11, '33': 12,
-            '34': 13, '36': 14, '38': 15, 'ONS': 16
+            'XXS': 1, 'XS': 2, 'S': 3, 'M': 4, 'L': 5, 'XL': 6, 'XXL': 7,
+    '28': 8, '29': 9, '30': 10, '31': 11, '32': 12, '33': 13,
+    '34': 14, '36': 15, '38': 16, 'ONS': 17
         };
         this.processedData = null;
         this.originalData = null;
